@@ -116,10 +116,14 @@ class Main(Mixin, F45Base):
         for bad in ("HANDOFF RECOVERED", "HANDOFF DEGRADED"):
             self.assertNotIn(bad, out)
 
-    def test_unreadable_transcript_counts_as_no_boundary(self):
+    def test_unreadable_transcript_means_f51_does_not_apply(self):
+        # F51: a missing or unreadable transcript -> F51 does not apply; the 1.10.0 rule stays (recovery, then DEGRADED)
         p = self.run_case(6000, [], transcript=False)
         p["transcript_path"] = os.path.join(self.tmp, "does-not-exist.jsonl")
-        self.assert_precomputed_ok(p, 6000)
+        out = self.part1(p)
+        self.assertIsNotNone(out)
+        self.assertNotIn(NOTE_PFX, out)
+        self.assertTrue(out.startswith("HANDOFF RECOVERED") or out.startswith("HANDOFF DEGRADED"), out[:200])
 
 
 class Subagent(Mixin, F46Base):
