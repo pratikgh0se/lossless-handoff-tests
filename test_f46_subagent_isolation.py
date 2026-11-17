@@ -2,8 +2,8 @@
 Subagent isolation (agent_id hook inputs) and always-on managed hooks. Temp HOME, shim `claude`."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import HOOKS_DIR, PRE, POST, PLAIN, user, asst
-from test_f45_no_silent_miss import (F45Base, BOUNDARY, SETTINGS_TPL, REPO_DIR, RECOVERED_HEAD, CHECK_TAIL, iso)
+from helpers import HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, run_install
+from test_f45_no_silent_miss import (F45Base, BOUNDARY, RECOVERED_HEAD, CHECK_TAIL, iso)
 
 SID = "S"
 AID = "a1"
@@ -233,7 +233,7 @@ class ManagedHooks(F46Base):
         os.chmod(os.path.join(self.fakebin, "sudo"), 0o755)
 
     def template(self):
-        return json.loads(open(SETTINGS_TPL).read().replace("__HOME__", "<H>"))
+        return installed_settings("<H>")  # what install.sh writes, with the HOME replaced by <H>
 
     def triples(self, d):
         out = []
@@ -243,16 +243,16 @@ class ManagedHooks(F46Base):
                     out.append((ev, g.get("matcher"), h.get("command", "").replace(self.home, "<H>")))
         return sorted(out, key=repr)
 
-    def run_bootstrap(self):
-        env = {"HOME": self.home, "PATH": self.fakebin + ":/usr/bin:/bin", "LANG": "C.UTF-8",
-               "HANDOFF_MANAGED_SETTINGS_PATH": self.sys_path}
-        r = subprocess.run(["bash", os.path.join(REPO_DIR, "setup", "bootstrap.sh"), "--managed-hooks"],
-                           cwd=REPO_DIR, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+    def run_managed(self):
+        t0 = time.time()
+        r = run_install(self.home, "--managed-hooks", extra={"HANDOFF_MANAGED_SETTINGS_PATH": self.sys_path},
+                        path=self.fakebin + ":/usr/bin:/bin", timeout=30)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertFalse(os.path.exists(self.sudo_log), "bootstrap must never run sudo")
+        self.assertLess(time.time() - t0, 5.0, "--managed-hooks must finish in under 5 s")
+        self.assertFalse(os.path.exists(self.sudo_log), "install.sh must never run sudo")
         found = []
         for root, _, files in os.walk(self.home):
-            if "managed-settings.json" in files and os.path.basename(root) == "machine-setup":
+            if "managed-settings.json" in files:
                 found.append(os.path.join(root, "managed-settings.json"))
         self.assertEqual(len(found), 1, (found, r.stdout))
         self.out_file = found[0]
@@ -263,21 +263,21 @@ class ManagedHooks(F46Base):
 
     def test_ac187_writes_exactly_the_handoff_entries(self):
         self.assertFalse(os.path.exists(self.sys_path))
-        d = self.run_bootstrap()
+        d = self.run_managed()
         self.assertEqual(set(d), {"hooks"}, list(d))
         self.assertEqual(set(d["hooks"]), set(HANDOFF_EVENTS))
         self.assertEqual({g.get("matcher") for g in d["hooks"]["SessionStart"]}, {"compact", "startup", "resume"})
         self.assertEqual(self.triples(d), self.triples(self.template()))
-        self.assertFalse(os.path.exists(self.sys_path), "the system file must not be created by bootstrap")
+        self.assertFalse(os.path.exists(self.sys_path), "the system file must not be created by install.sh")
 
     def test_ac187_keeps_existing_system_keys(self):
         os.makedirs(os.path.dirname(self.sys_path))
         orig = json.dumps({"permissions": {"deny": ["X"]}})
         open(self.sys_path, "w").write(orig)
-        d = self.run_bootstrap()
+        d = self.run_managed()
         self.assertEqual(d.get("permissions"), {"deny": ["X"]})
         self.assertEqual(set(d["hooks"]), set(HANDOFF_EVENTS))
-        self.assertEqual(open(self.sys_path).read(), orig, "system file is read-only for bootstrap")
+        self.assertEqual(open(self.sys_path).read(), orig, "system file is read-only for install.sh")
 
     def test_ac187_check_accepts_precompact_in_managed_file_only(self):
         hooks_home = os.path.join(self.home, ".claude", "hooks")
@@ -286,7 +286,7 @@ class ManagedHooks(F46Base):
             p = os.path.join(HOOKS_DIR, n)
             if n.endswith(".py") and os.path.isfile(p):
                 shutil.copy2(p, hooks_home)
-        tpl = json.loads(open(SETTINGS_TPL).read().replace("__HOME__", self.home))
+        tpl = installed_settings(self.home)  # what install.sh writes, with this temp HOME in the paths
         managed = {"hooks": {"PreCompact": tpl["hooks"]["PreCompact"]}}
         user_settings = json.loads(json.dumps(tpl))
         user_settings["hooks"].pop("PreCompact")

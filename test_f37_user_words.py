@@ -327,11 +327,7 @@ class F37(f36.F36):
 
     # ---------------------------------------------------------------- AC 80
     def test_ac80_settings_template_registers_both_parts(self):
-        tpl = os.path.join(os.path.dirname(os.path.dirname(HOOKS_DIR)), "claude", "settings.template.json") \
-            if os.path.basename(HOOKS_DIR) != "hooks" or os.path.basename(os.path.dirname(HOOKS_DIR)) != "claude" \
-            else os.path.join(os.path.dirname(HOOKS_DIR), "settings.template.json")
-        with open(tpl) as fh:
-            d = json.load(fh)
+        d = installed_settings()  # what install.sh writes to settings.json
         cmds = []
         for ent in d["hooks"]["SessionStart"]:
             if ent.get("matcher") == "compact":

@@ -2,6 +2,7 @@
 index --all, session-end hook entry, settings template and launchd plist. Temp HOME, fake embedding server or closed port."""
 import glob, json, os, re, shutil, sqlite3, subprocess, sys, time, unittest, threading
 from test_f44_recall import RecallBase, FakeEmbed, RECALL, HOOKS_DIR, git, slug, closed_port_url
+from helpers import installed_settings, installed_plist
 
 SID = ["a%d%d%d%d%d%d%d-0000-4000-8000-00000000000%d" % (i, i, i, i, i, i, i, i) for i in range(1, 8)]
 
@@ -150,17 +151,8 @@ class SessionEnd(AutoBase):
 
 
 class Wiring(unittest.TestCase):
-    SETTINGS_DIR = os.path.dirname(HOOKS_DIR)
-
-    def settings_path(self):
-        for n in ("settings.template.json",):
-            p = os.path.join(self.SETTINGS_DIR, n)
-            if os.path.isfile(p):
-                return p
-        self.fail("no settings file in %s" % self.SETTINGS_DIR)
-
     def test_ac171_settings_has_one_session_end_entry(self):
-        d = json.load(open(self.settings_path()))
+        d = installed_settings()  # what install.sh writes to settings.json
         groups = d.get("hooks", {}).get("SessionEnd")
         self.assertTrue(groups, "no SessionEnd hooks")
         cmds = [h.get("command", "") for g in groups for h in g.get("hooks", [])]
@@ -171,16 +163,11 @@ class Wiring(unittest.TestCase):
         self.assertTrue(t[0] is None or t[0] <= 30, t)
 
     def test_ac171_launchd_plist_valid_with_index_all(self):
-        ld = os.path.join(os.path.dirname(self.SETTINGS_DIR), "launchd")
-        p = os.path.join(ld, "recall-index.plist.tmpl")
-        self.assertTrue(os.path.isfile(p), "plist missing in %s" % ld)
-        if not shutil.which("plutil"):
-            self.skipTest("plutil not available")
-        r = subprocess.run(["plutil", "-lint", p], capture_output=True, text=True, timeout=20)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        j = subprocess.run(["plutil", "-convert", "json", "-o", "-", p], capture_output=True, text=True, timeout=20)
-        self.assertEqual(j.returncode, 0, j.stderr)
-        args = json.loads(j.stdout)["ProgramArguments"]
+        d, p = installed_plist("recall-index")  # the plist that install.sh wrote (macOS)
+        if shutil.which("plutil"):
+            r = subprocess.run(["plutil", "-lint", p], capture_output=True, text=True, timeout=20)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        args = d["ProgramArguments"]
         self.assertIn("index", args)
         self.assertIn("--all", args)
 

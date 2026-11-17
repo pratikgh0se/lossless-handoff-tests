@@ -2,8 +2,8 @@
 Receipts written by the SessionStart part 1 inject, and `precompact-handoff.py --prove`. Temp HOME, keyword-only recall."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall
-from test_f45_no_silent_miss import F45Base, BOUNDARY, SETTINGS_TPL, REPO_DIR, RECOVERED_HEAD, CHECK_TAIL, iso
+from helpers import HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall, installed_settings, installed_plist
+from test_f45_no_silent_miss import F45Base, BOUNDARY, RECOVERED_HEAD, CHECK_TAIL, iso
 from test_f44_recall import RecallBase, RECALL
 
 SID = "f47aaaaa-0000-4000-8000-000000000001"
@@ -429,7 +429,7 @@ class Alert(ProofBase):
             p = os.path.join(HOOKS_DIR, n)
             if n.endswith(".py") and os.path.isfile(p):
                 shutil.copy2(p, self.hooks_home)
-        json.dump(json.loads(open(SETTINGS_TPL).read().replace("__HOME__", self.home)),
+        json.dump(installed_settings(self.home),  # what install.sh writes, with this temp HOME in the paths
                   open(os.path.join(self.home, ".claude", "settings.json"), "w"))
         files = {n: sha(open(os.path.join(self.hooks_home, n), "rb").read())
                  for n in ("precompact-handoff.py", "postcompact-inject.py", "recall.py")
@@ -455,10 +455,7 @@ class Alert(ProofBase):
         self.assertEqual(self.check(), "")
 
     def test_ac195_plist_runs_reconcile_and_prove(self):
-        import plistlib
-        p = os.path.join(REPO_DIR, "launchd", "handoff-reconcile.plist.tmpl")
-        with open(p, "rb") as f:
-            d = plistlib.load(f)
+        d, _ = installed_plist("handoff-reconcile")  # the plist that install.sh wrote (macOS)
         args = d["ProgramArguments"]
         self.assertIn("--reconcile", args)
         self.assertIn("--prove", args)

@@ -2,12 +2,9 @@
 Write early (pending file), recover at SessionStart compact, reconcile, install check. Temp HOME, shim `claude`."""
 import hashlib, json, os, plistlib, re, shutil, signal, subprocess, sys, time, unittest
 
-from helpers import (HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst)
+from helpers import (HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
 
 BOUNDARY = {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted"}
-TEMPLATE_DIR = os.path.dirname(HOOKS_DIR)
-REPO_DIR = os.path.dirname(TEMPLATE_DIR)
-SETTINGS_TPL = os.path.join(TEMPLATE_DIR, "settings.template.json")
 CHECK_TAIL = " Run the installer again, then restart Claude Code."
 RECOVERED_HEAD = ("HANDOFF RECOVERED: the pre-compaction hook did not run for this compaction; this handoff was "
                   "rebuilt from the transcript without a model summary. Use recall for detail.")
@@ -264,7 +261,7 @@ class Check(F45Base):
         self.write_manifest()
 
     def write_settings(self, drop=None):
-        d = json.loads(open(SETTINGS_TPL).read().replace("__HOME__", self.home))
+        d = installed_settings(self.home)  # what install.sh writes, with this temp HOME in the paths
         if drop:
             d["hooks"].pop(drop, None)
         json.dump(d, open(self.settings, "w"))
@@ -334,7 +331,7 @@ class Check(F45Base):
 # ---------------------------------------------------------------- AC 179, 180
 class Wiring(unittest.TestCase):
     def test_ac179_settings_template_has_check_in_startup_and_resume(self):
-        d = json.load(open(SETTINGS_TPL))
+        d = installed_settings()  # what install.sh writes to settings.json
         groups = d["hooks"]["SessionStart"]
         for matcher in ("startup", "resume"):
             with self.subTest(matcher):
@@ -346,13 +343,10 @@ class Wiring(unittest.TestCase):
                 self.assertTrue(to[0] is None or to[0] <= 10, to)
 
     def test_ac179_reconcile_plist_valid(self):
-        p = os.path.join(REPO_DIR, "launchd", "handoff-reconcile.plist.tmpl")
-        self.assertTrue(os.path.isfile(p), p)
+        d, p = installed_plist("handoff-reconcile")  # the plist that install.sh wrote (macOS)
         if shutil.which("plutil"):
             r = subprocess.run(["plutil", "-lint", p], capture_output=True, text=True, timeout=20)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        with open(p, "rb") as f:
-            d = plistlib.load(f)
         args = d["ProgramArguments"]
         self.assertIn("--reconcile", args)
         self.assertTrue(any("precompact-handoff.py" in a for a in args), args)

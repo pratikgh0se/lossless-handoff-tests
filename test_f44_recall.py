@@ -5,7 +5,7 @@ closed port so they are deterministic. Secrets: placeholders only."""
 import hashlib, json, os, re, shutil, socket, sqlite3, subprocess, sys, tempfile, threading, time, unittest, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import test_f42_lossless_rules as _f42
-from helpers import HOOKS_DIR, PRE, POST, HookCase, AUTHORITY
+from helpers import HOOKS_DIR, PRE, POST, HookCase, AUTHORITY, installed_settings
 from test_content import git
 
 RECALL = os.path.join(HOOKS_DIR, "recall.py")
@@ -797,8 +797,7 @@ class Hook(_f42.F42):
 
     # ---- AC 150
     def test_ac150_template_allow_rule(self):
-        tpl = os.path.join(os.path.dirname(HOOKS_DIR), "settings.template.json")
-        d = json.load(open(tpl))
+        d = installed_settings()  # what install.sh writes to settings.json
         self.assertIn(ALLOW_RULE, d["permissions"]["allow"])
 
     def test_ac150_hook_version_1_10_0(self):

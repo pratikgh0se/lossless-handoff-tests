@@ -939,9 +939,7 @@ class InjectLedger(F39):
 # ---------------------------------------------------------------- AC 107
 class Registration(F39):
     def groups(self):
-        tpl = os.path.join(os.path.dirname(HOOKS_DIR), "settings.template.json")
-        with open(tpl) as fh:
-            d = json.load(fh)
+        d = installed_settings()  # what install.sh writes to settings.json
         out = []
         for ent in d["hooks"]["SessionStart"]:
             out.append((ent.get("matcher", ""), [h.get("command", "") for h in ent.get("hooks", [])]))

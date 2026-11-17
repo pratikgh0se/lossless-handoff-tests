@@ -1,14 +1,8 @@
-"""F36 canary: ACs 70-71 of specs/handoff-hooks-spec.md (run.sh against a FAKE `claude` on PATH, launchd template,
-deps.tsv, --catch-up). Never calls the real claude, the network, or real state dirs: HOME, TMPDIR and PATH are temp.
+"""F36 canary: ACs 70-71 of docs/spec.md (run.sh against a FAKE `claude` on PATH, the LaunchAgent that install.sh
+--canary writes, --catch-up). Never calls the real claude, the network, or real state dirs: HOME, TMPDIR and PATH are temp.
 The fake claude runs the REAL hooks (HOOKS_DIR) on a synthetic transcript to emulate PreCompact/SessionStart."""
-import json, os, plistlib, re, shutil, signal, stat, subprocess, sys, tempfile, time, unittest
-from helpers import HOOKS_DIR
-
-REPO = os.environ.get("MACHINE_SETUP_DIR") or os.path.abspath(os.path.join(HOOKS_DIR, "..", ".."))
-RUN = os.path.join(REPO, "tools", "handoff-canary", "run.sh")
-TMPL = os.path.join(REPO, "launchd", "handoff-canary.plist.tmpl")
-DEPS = os.path.join(REPO, "launchd", "deps.tsv")
-HOOK_WRAPPER = os.path.join(REPO, "claude", "hooks", "handoff-canary.sh")
+import json, os, re, shutil, signal, stat, subprocess, sys, tempfile, time, unittest
+from helpers import HOOKS_DIR, CANARY_RUN as RUN, HOOK_WRAPPER, installed_plist
 PRE = os.path.join(HOOKS_DIR, "precompact-handoff.py")
 POST = os.path.join(HOOKS_DIR, "postcompact-inject.py")
 
@@ -388,21 +382,12 @@ class CatchUp(CanaryCase):
 
 
 class Launchd(unittest.TestCase):
-    def render(self, prefix="com.machine-setup"):
-        text = open(TMPL).read()
-        return (text.replace("__LABEL_PREFIX__", prefix).replace("__REPO__", REPO)
-                .replace("__HOME__", "/Users/test"))
-
     def test_ac71_plist(self):
-        d = tempfile.mkdtemp(prefix="pl-")
-        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
-        out = os.path.join(d, "x.plist")
-        open(out, "w").write(self.render())
+        pl, out = installed_plist("handoff-canary")  # the plist that `install.sh --canary` wrote (macOS)
         if shutil.which("plutil"):
             lint = subprocess.run(["plutil", "-lint", out], capture_output=True, text=True)
             self.assertEqual(lint.returncode, 0, lint.stdout + lint.stderr)
-        pl = plistlib.load(open(out, "rb"))
-        self.assertEqual(pl["Label"], "com.machine-setup.handoff-canary")
+        self.assertEqual(pl["Label"], "com.lossless-handoff.handoff-canary")
         sci = pl["StartCalendarInterval"]
         if isinstance(sci, list):
             self.assertEqual(len(sci), 1)
@@ -412,20 +397,11 @@ class Launchd(unittest.TestCase):
         self.assertEqual(set(pl["EnvironmentVariables"].keys()), {"HOME", "PATH"})
         args = pl["ProgramArguments"]
         self.assertEqual(args[:2], ["/bin/bash", "-lc"])
-        self.assertTrue(args[-1].rstrip("'\" ").endswith("tools/handoff-canary/run.sh --catch-up"), args)
+        # AC 71: ProgramArguments ends with `<canary>/run.sh --catch-up`
+        self.assertTrue(args[-1].rstrip("'\" ").endswith("handoff-canary/run.sh --catch-up"), args)
         self.assertTrue(pl["StandardOutPath"].endswith(".local/state/handoff-canary/logs/launchd.out"))
         self.assertTrue(pl["StandardErrorPath"].endswith(".local/state/handoff-canary/logs/launchd.err"))
         self.assertNotIn("__", open(out).read())
-
-    def test_ac71_label_prefix_override(self):
-        pl = plistlib.loads(self.render("com.example.me").encode())
-        self.assertEqual(pl["Label"], "com.example.me.handoff-canary")
-
-    def test_ac71_deps_row(self):
-        rows = [l for l in open(DEPS).read().split("\n") if "handoff-canary" in l]
-        self.assertEqual(len(rows), 1, rows)
-        cols = rows[0].split("\t")
-        self.assertEqual(cols, ["__LABEL_PREFIX__.handoff-canary", "-", "-", "-"])
 
 
 if __name__ == "__main__":

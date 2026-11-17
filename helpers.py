@@ -1,10 +1,101 @@
 import json, os, re, shutil, stat, subprocess, sys, tempfile, unittest
 
-# Hook scripts under test: the PUBLIC repo copy by default; override with HANDOFF_HOOKS_DIR (legacy: HOOKS_DIR).
+# Hook scripts under test: set HANDOFF_HOOKS_DIR (legacy: HOOKS_DIR) to the hooks folder of the repo.
 HOOKS_DIR = (os.environ.get("HANDOFF_HOOKS_DIR") or os.environ.get("HOOKS_DIR")
-             or os.path.expanduser("~/CodeBase/machine-setup/claude/hooks"))
+             or os.path.expanduser("~/CodeBase/lossless-handoff/hooks"))
 PRE = os.path.join(HOOKS_DIR, "precompact-handoff.py")
 POST = os.path.join(HOOKS_DIR, "postcompact-inject.py")
+
+# ---- Repo layout: ALL repo paths are built here, once. Tests must not build repo paths themselves.
+# LOSSLESS_HANDOFF_REPO is the repo root. Its default is the parent of HANDOFF_HOOKS_DIR.
+REPO = os.path.abspath(os.environ.get("LOSSLESS_HANDOFF_REPO") or os.path.dirname(os.path.abspath(HOOKS_DIR)))
+INSTALL_SH = os.path.join(REPO, "install.sh")
+UNINSTALL_SH = os.path.join(REPO, "uninstall.sh")
+CANARY_RUN = os.path.join(REPO, "tools", "handoff-canary", "run.sh")
+HOOK_WRAPPER = os.path.join(HOOKS_DIR, "handoff-canary.sh")
+IS_MACOS = sys.platform == "darwin"
+LABEL_PREFIX = "com.lossless-handoff"
+REAL_HOME = os.path.realpath(os.path.expanduser("~"))
+
+
+# ---- Safe runner for install.sh and uninstall.sh (HARD SAFETY).
+# Every run uses a temp HOME and LOSSLESS_HANDOFF_NO_LAUNCHCTL=1, so launchctl never touches the real login session.
+# RECALL_EMBED_URL points at a closed port and --yes is refused, so nothing goes to the network.
+def safe_script_env(home, extra=None, path=None):
+    if os.path.realpath(home) in (REAL_HOME, "/"):
+        raise RuntimeError("refusing to run an installer with the real HOME: %s" % home)
+    e = {"HOME": home, "PATH": path or os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8",
+         "RECALL_EMBED_URL": "http://127.0.0.1:9"}
+    e.update(extra or {})
+    e["HOME"] = home
+    e["LOSSLESS_HANDOFF_NO_LAUNCHCTL"] = "1"
+    return e
+
+
+def run_script(script, args, home, extra=None, path=None, timeout=180):
+    """Run install.sh or uninstall.sh (an absolute path in REPO) against a temp HOME. Returns CompletedProcess."""
+    assert script in (INSTALL_SH, UNINSTALL_SH), script
+    assert "--yes" not in args, "tests must not pass --yes (it can pull a model from the network)"
+    return subprocess.run(["bash", script, *args], env=safe_script_env(home, extra, path), cwd=REPO,
+                          stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
+
+
+def run_install(home, *args, extra=None, path=None, timeout=180):
+    return run_script(INSTALL_SH, args, home, extra, path, timeout)
+
+
+def run_uninstall(home, *args, extra=None, path=None, timeout=180):
+    return run_script(UNINSTALL_SH, args, home, extra, path, timeout)
+
+
+_INSTALLS = {}
+
+
+def _cleanup_installs():
+    for home, _ in _INSTALLS.values():
+        shutil.rmtree(os.path.dirname(home), ignore_errors=True)
+
+
+import atexit
+atexit.register(_cleanup_installs)
+
+
+def installed_home(*args):
+    """Install ONCE per argument set into a shared temp HOME (read-only for tests). Returns (home, CompletedProcess)."""
+    key = tuple(args)
+    if key not in _INSTALLS:
+        base = os.path.realpath(tempfile.mkdtemp(prefix="lhi-"))
+        home = os.path.join(base, "home")
+        os.makedirs(home)
+        r = run_install(home, *args)
+        if r.returncode != 0:
+            raise RuntimeError("install.sh %s failed (%s): %s%s" % (" ".join(args), r.returncode, r.stdout, r.stderr))
+        _INSTALLS[key] = (home, r)
+    return _INSTALLS[key]
+
+
+def installed_settings(home_as=None, *args):
+    """The settings.json that `install.sh` wrote (default `--no-nightly`), parsed. If `home_as` is given, the temp
+    install HOME in every path is replaced by it, so the result can be reused in another temp HOME."""
+    home, _ = installed_home(*(args or ("--no-nightly",)))
+    with open(os.path.join(home, ".claude", "settings.json")) as f:
+        text = f.read()
+    if home_as is not None:
+        text = text.replace(home, home_as)
+    return json.loads(text)
+
+
+def installed_plist(suffix):
+    """Parsed LaunchAgent plist `com.lossless-handoff.<suffix>` that `install.sh --canary` wrote (macOS only).
+    Returns (dict, path). Linux has no plists, and the spec gives no exact crontab format, so the test skips there."""
+    if not IS_MACOS:
+        raise unittest.SkipTest("LaunchAgent plists exist on macOS only; the spec gives no exact Linux crontab format")
+    import plistlib
+    home, _ = installed_home("--canary")
+    path = os.path.join(home, "Library", "LaunchAgents", "%s.%s.plist" % (LABEL_PREFIX, suffix))
+    assert os.path.isfile(path), "install.sh wrote no %s" % path
+    with open(path, "rb") as f:
+        return plistlib.load(f), path
 
 
 def no_recall(fn):

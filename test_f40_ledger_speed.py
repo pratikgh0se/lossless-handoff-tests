@@ -391,9 +391,7 @@ class SyntheticUserEntries(F40):
 # ---------------------------------------------------------------- AC 123
 class Template(F40):
     def test_ac123_precompact_timeout_150(self):
-        tpl = os.path.join(os.path.dirname(HOOKS_DIR), "settings.template.json")
-        with open(tpl) as fh:
-            d = json.load(fh)
+        d = installed_settings()  # what install.sh writes to settings.json
         cmds = [h for ent in d["hooks"]["PreCompact"] for h in ent.get("hooks", [])
                 if "precompact-handoff.py" in h.get("command", "")]
         self.assertEqual(len(cmds), 1, cmds)

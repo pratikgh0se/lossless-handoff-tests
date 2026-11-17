@@ -3,8 +3,8 @@ Claims register: evaluation by `--prove`, `--claims`, `--claims-lint`, `--check`
 are run from a temp COPY of the hooks dir so a custom claims.json can sit next to them."""
 import json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import HOOKS_DIR, user
-from test_f45_no_silent_miss import F45Base, SETTINGS_TPL, iso
+from helpers import HOOKS_DIR, user, installed_settings
+from test_f45_no_silent_miss import F45Base, iso
 from test_f47_proof_receipts import sha, jl
 
 REAL_REGISTER = os.path.join(HOOKS_DIR, "claims.json")
@@ -152,7 +152,7 @@ class Lint(ClaimsBase):
 class Alert(ClaimsBase):
     def setUp(self):
         super().setUp()
-        json.dump(json.loads(open(SETTINGS_TPL).read().replace("__HOME__", self.home)),
+        json.dump(installed_settings(self.home),  # what install.sh writes, with this temp HOME in the paths
                   open(os.path.join(self.home, ".claude", "settings.json"), "w"))
         files = {n: sha(open(os.path.join(self.hooks_home, n), "rb").read())
                  for n in ("precompact-handoff.py", "postcompact-inject.py", "recall.py")
