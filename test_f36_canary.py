@@ -397,8 +397,9 @@ class Launchd(unittest.TestCase):
         self.assertEqual(set(pl["EnvironmentVariables"].keys()), {"HOME", "PATH"})
         args = pl["ProgramArguments"]
         self.assertEqual(args[:2], ["/bin/bash", "-lc"])
-        # AC 71: ProgramArguments ends with `<canary>/run.sh --catch-up`
-        self.assertTrue(args[-1].rstrip("'\" ").endswith("handoff-canary/run.sh --catch-up"), args)
+        # AC 71 / F36.E (amended): `/bin/bash -lc '<hooks>/handoff-canary.sh --catch-up'` (the wrapper)
+        self.assertEqual(len(args), 3, args)
+        self.assertTrue(args[-1].rstrip("'\" ").endswith("/.claude/hooks/handoff-canary.sh --catch-up"), args)
         self.assertTrue(pl["StandardOutPath"].endswith(".local/state/handoff-canary/logs/launchd.out"))
         self.assertTrue(pl["StandardErrorPath"].endswith(".local/state/handoff-canary/logs/launchd.err"))
         self.assertNotIn("__", open(out).read())

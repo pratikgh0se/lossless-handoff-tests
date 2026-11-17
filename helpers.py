@@ -21,27 +21,36 @@ REAL_HOME = os.path.realpath(os.path.expanduser("~"))
 # ---- Safe runner for install.sh and uninstall.sh (HARD SAFETY).
 # Every run uses a temp HOME and LOSSLESS_HANDOFF_NO_LAUNCHCTL=1, so launchctl never touches the real login session.
 # RECALL_EMBED_URL points at a closed port and --yes is refused, so nothing goes to the network.
-def safe_script_env(home, extra=None, path=None):
+def safe_script_env(home, extra=None, path=None, allow_launchctl_with_fake=None):
+    """`allow_launchctl_with_fake` is the ONLY way to drop LOSSLESS_HANDOFF_NO_LAUNCHCTL (AC 207). It must be the
+    folder of a fake `launchctl` that comes first on PATH; the real launchctl must never run."""
     if os.path.realpath(home) in (REAL_HOME, "/"):
         raise RuntimeError("refusing to run an installer with the real HOME: %s" % home)
     e = {"HOME": home, "PATH": path or os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8",
          "RECALL_EMBED_URL": "http://127.0.0.1:9"}
     e.update(extra or {})
     e["HOME"] = home
-    e["LOSSLESS_HANDOFF_NO_LAUNCHCTL"] = "1"
+    if allow_launchctl_with_fake is None:
+        e["LOSSLESS_HANDOFF_NO_LAUNCHCTL"] = "1"
+    else:
+        e.pop("LOSSLESS_HANDOFF_NO_LAUNCHCTL", None)
+        fake = os.path.join(allow_launchctl_with_fake, "launchctl")
+        found = shutil.which("launchctl", path=e["PATH"])
+        if not IS_MACOS or not found or os.path.realpath(found) != os.path.realpath(fake):
+            raise RuntimeError("the fake launchctl is not first on PATH: %s" % found)
     return e
 
 
-def run_script(script, args, home, extra=None, path=None, timeout=180):
+def run_script(script, args, home, extra=None, path=None, timeout=180, fake_launchctl=None):
     """Run install.sh or uninstall.sh (an absolute path in REPO) against a temp HOME. Returns CompletedProcess."""
     assert script in (INSTALL_SH, UNINSTALL_SH), script
     assert "--yes" not in args, "tests must not pass --yes (it can pull a model from the network)"
-    return subprocess.run(["bash", script, *args], env=safe_script_env(home, extra, path), cwd=REPO,
+    return subprocess.run(["bash", script, *args], env=safe_script_env(home, extra, path, fake_launchctl), cwd=REPO,
                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
 
 
-def run_install(home, *args, extra=None, path=None, timeout=180):
-    return run_script(INSTALL_SH, args, home, extra, path, timeout)
+def run_install(home, *args, extra=None, path=None, timeout=180, fake_launchctl=None):
+    return run_script(INSTALL_SH, args, home, extra, path, timeout, fake_launchctl)
 
 
 def run_uninstall(home, *args, extra=None, path=None, timeout=180):
