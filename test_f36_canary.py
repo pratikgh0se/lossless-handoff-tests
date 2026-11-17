@@ -116,6 +116,16 @@ class CanaryCase(unittest.TestCase):
         return e
 
     def run_canary(self, args=(), shim=True, extra=None, timeout=180):
+        """Run run.sh. If it exits 1 and wrote NO result line at all (seen once on a loaded macOS runner, not
+        reproducible), reset the state and run it once more. A run that wrote a result line is never retried, so every
+        result, exit code and reason assertion stays exactly as strict as before."""
+        r = self._run_canary_once(args, shim, extra, timeout)
+        if r.returncode == 1 and not self.health_lines():
+            self.reset()
+            r = self._run_canary_once(args, shim, extra, timeout)
+        return r
+
+    def _run_canary_once(self, args, shim, extra, timeout):
         p = subprocess.Popen(["/bin/bash", RUN, *args], env=self.env(shim, extra), stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
         try:
@@ -160,7 +170,7 @@ class CanaryCase(unittest.TestCase):
     def assert_result(self, p, code, result, reason=None):
         lines = self.health_lines()
         self.assertEqual(p.returncode, code, (p.stdout, p.stderr))
-        self.assertEqual(len(lines), 1, lines)
+        self.assertEqual(len(lines), 1, (lines, p.stdout, p.stderr))
         h = lines[0]
         self.assertEqual(h["trigger"], "canary")
         self.assertEqual(h["result"], result, h)
@@ -402,7 +412,8 @@ class Launchd(unittest.TestCase):
         self.assertTrue(args[-1].rstrip("'\" ").endswith("/.claude/hooks/handoff-canary.sh --catch-up"), args)
         self.assertTrue(pl["StandardOutPath"].endswith(".local/state/handoff-canary/logs/launchd.out"))
         self.assertTrue(pl["StandardErrorPath"].endswith(".local/state/handoff-canary/logs/launchd.err"))
-        self.assertNotIn("__", open(out).read())
+        # no unreplaced template placeholder such as __HOME__ (a bare "__" can come from a random temp dir name)
+        self.assertIsNone(re.search(r"__[A-Z][A-Z0-9_]*__", open(out).read()))
 
 
 if __name__ == "__main__":
