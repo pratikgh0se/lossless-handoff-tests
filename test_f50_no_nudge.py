@@ -51,7 +51,8 @@ class Base(unittest.TestCase):
                            input="{}", capture_output=True, text=True, timeout=30,
                            env={"HOME": self.home, "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8"})
         self.assertEqual(r.returncode, 0, r.stderr)
-        return r.stdout
+        # F52.b: a fresh temp HOME has no cleanupPeriodDays, so --check adds that one line. It is not under test here.
+        return "".join(l for l in r.stdout.splitlines(True) if not l.startswith("HANDOFF CHECK: Claude Code deletes chat"))
 
     def assert_no_nudge_but_all_else(self):
         self.assertFalse(os.path.exists(os.path.join(self.hooks, NUDGE)))

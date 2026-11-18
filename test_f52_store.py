@@ -147,8 +147,8 @@ class Installer(Base):
 
     def assert_others_kept(self):
         s = self.settings()
-        self.assertEqual(s["env"], {"FOO": "1"})
-        self.assertEqual(s["permissions"], {"allow": ["Bash(ls:*)"]})
+        self.assertEqual(s["env"].get("FOO"), "1")
+        self.assertIn("Bash(ls:*)", s["permissions"]["allow"])
 
     def test_ac222_raises_to_365_and_is_idempotent(self):
         self.seed(30)

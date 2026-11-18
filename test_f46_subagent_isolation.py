@@ -290,6 +290,7 @@ class ManagedHooks(F46Base):
         managed = {"hooks": {"PreCompact": tpl["hooks"]["PreCompact"]}}
         user_settings = json.loads(json.dumps(tpl))
         user_settings["hooks"].pop("PreCompact")
+        user_settings["cleanupPeriodDays"] = 365  # F52.b off
         json.dump(user_settings, open(os.path.join(self.home, ".claude", "settings.json"), "w"))
         os.makedirs(os.path.dirname(self.sys_path))
         json.dump(managed, open(self.sys_path, "w"))
@@ -316,7 +317,7 @@ class Version(unittest.TestCase):
     def test_ac188_hook_version_in_both_hooks(self):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
-                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.10\.1["']""")
+                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.11\.0["']""")
 
 
 class VersionInHealth(F46Base):

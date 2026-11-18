@@ -152,7 +152,7 @@ class Lint(ClaimsBase):
 class Alert(ClaimsBase):
     def setUp(self):
         super().setUp()
-        json.dump(installed_settings(self.home),  # what install.sh writes, with this temp HOME in the paths
+        json.dump(dict(installed_settings(self.home), cleanupPeriodDays=365),  # F52.b off; what install.sh writes, with this temp HOME in the paths
                   open(os.path.join(self.home, ".claude", "settings.json"), "w"))
         files = {n: sha(open(os.path.join(self.hooks_home, n), "rb").read())
                  for n in ("precompact-handoff.py", "postcompact-inject.py", "recall.py")

@@ -16,10 +16,24 @@ HEAD = "Lossless Handoff guidance for this summary:"
 
 
 class Steer(HookCase):
+    STEER_ENV = None
     def setUp(self):
         super().setUp()
         self.write_transcript([user("Please remember that we decided to use the blue palette for the site."),
                                asst("Understood. I will use the blue palette.")])
+
+    def sub_payload(self, agent="a1"):
+        # a subagent has its own transcript: <dir of main transcript>/<sid>/subagents/agent-<id>.jsonl
+        p = self.payload("S")
+        p["agent_id"] = agent
+        p["agent_type"] = "general-purpose"
+        p["hook_event_name"] = "PreCompact"
+        sub = os.path.join(os.path.dirname(self.tpath), "S", "subagents", "agent-%s.jsonl" % agent)
+        os.makedirs(os.path.dirname(sub), exist_ok=True)
+        with open(sub, "w") as f:
+            for e in (user("Please remember the blue palette decision for the subagent."), asst("Understood.")):
+                f.write(json.dumps(dict(e, isSidechain=True, agentId=agent)) + "\n")
+        return p
 
     def run_event(self, payload, extra=None):
         r = self.run_pre(payload, extra=extra)
@@ -88,8 +102,7 @@ class Steer(HookCase):
             self.assertNotIn(HEAD, r.stdout + r.stderr, args)
 
     def test_ac234_subagent_prints_block(self):
-        p = self.payload("S")
-        p["agent_id"] = "a1"
+        p = self.sub_payload()
         r = self.run_event(p)
         self.assert_block(r)
         self.assertTrue(os.path.getsize(os.path.join(self.hd, "S-a-a1-latest.md")) > 0)
@@ -109,9 +122,7 @@ class Steer(HookCase):
         self.assertEqual(self.health()["steer"], "off")
 
     def test_ac235_subagent_row_printed(self):
-        p = self.payload("S")
-        p["agent_id"] = "a1"
-        self.run_event(p)
+        self.run_event(self.sub_payload())
         self.assertEqual(self.health()["steer"], "printed")
 
 

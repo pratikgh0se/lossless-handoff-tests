@@ -177,7 +177,8 @@ class Cleanup(HookCase):
             os.utime(p, (now - days * 86400, now - days * 86400))
         mk("old-latest.md", 15); mk("x-agent.md", 15); mk("new.md", 13)
         mk("x-agent.meta.json", 15); mk("notes.txt", 15); mk("d.md", 15, d=True)
-        self.run_pre(self.payload("S"))
+        # F52.d: .md files now live HANDOFF_RETENTION_DAYS (default 365); the 14-day case sets it to 14
+        self.run_pre(self.payload("S"), extra={"HANDOFF_RETENTION_DAYS": "14"})
         ex = lambda n: os.path.exists(os.path.join(self.hd, n))
         self.assertFalse(ex("old-latest.md"))
         self.assertFalse(ex("x-agent.md"))

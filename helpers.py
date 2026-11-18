@@ -222,6 +222,11 @@ class HookCase(unittest.TestCase):
         self.home = os.path.join(self.tmp, "home")
         os.makedirs(self.home)
         self.hd = os.path.join(self.home, ".local", "state", "claude-handoffs")
+        # F52.b: `--check` warns when cleanupPeriodDays is below 90 (default 30). Older tests assert an empty `--check`
+        # output, so the temp HOME starts with a high value. F52 tests use their own temp HOME.
+        os.makedirs(os.path.join(self.home, ".claude"), exist_ok=True)
+        with open(os.path.join(self.home, ".claude", "settings.json"), "w") as f:
+            json.dump({"cleanupPeriodDays": 365}, f)
         self.bin = os.path.join(self.tmp, "bin")
         os.makedirs(self.bin)
         git = shutil.which("git")
@@ -299,11 +304,16 @@ class HookCase(unittest.TestCase):
     # F39: the ledger merge would call the `claude` shim and perturb every pre-F39 test that counts shim calls, so the
     # ledger is OFF by default for old tests (HANDOFF_LEDGER=0). F39 tests set LEDGER_ENV = None (ledger enabled).
     LEDGER_ENV = "0"
+    # F53: the PreCompact hook prints guidance on stdout. Older tests assert an empty stdout, so it is OFF by default
+    # here (HANDOFF_COMPACT_STEER=0). F53 tests set STEER_ENV = None (steer enabled).
+    STEER_ENV = "0"
 
     def env(self, fallback="0", extra=None):
         e = {"HOME": self.home, "PATH": self.bin, "LANG": "C.UTF-8"}
         if self.LEDGER_ENV is not None:
             e["HANDOFF_LEDGER"] = self.LEDGER_ENV
+        if self.STEER_ENV is not None:
+            e["HANDOFF_COMPACT_STEER"] = self.STEER_ENV
         if fallback is not None:
             e["HANDOFF_HAIKU_FALLBACK"] = fallback
         e.update(extra or {})

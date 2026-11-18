@@ -282,7 +282,8 @@ class Check(F45Base):
                            input="", capture_output=True, text=True, env=self.env(None), timeout=30)
         self.elapsed = time.time() - t
         self.assertEqual(r.returncode, 0, r.stderr)
-        return r.stdout
+        # F52.b: with no or unreadable settings, --check adds its own line. It is not under test here (AC 221 covers it).
+        return "".join(l for l in r.stdout.splitlines(True) if not l.startswith("HANDOFF CHECK: Claude Code deletes chat"))
 
     def one_line(self, out, needle):
         self.assertTrue(out.startswith("HANDOFF CHECK: "), out)
@@ -355,7 +356,7 @@ class Wiring(unittest.TestCase):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
                 src = open(path).read()
-                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.10\.1["']""")
+                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.11\.0["']""")
 
 
 class VersionInHealth(F45Base):

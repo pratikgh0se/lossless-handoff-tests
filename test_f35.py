@@ -733,7 +733,8 @@ class Unchanged(F35):
         os.utime(old, (t, t))
         self.agent_file("L" * 400, meta=self.STALE)
         self.write_transcript(self._big())
-        self.run_pre(self.payload("S"))
+        # F52.d: .md files now live HANDOFF_RETENTION_DAYS (default 365); this 14-day case sets it to 14
+        self.run_pre(self.payload("S"), extra={"HANDOFF_RETENTION_DAYS": "14"})
         self.assertFalse(os.path.exists(old))
 
     def test_ac47_inject_of_stale_lead_file(self):
