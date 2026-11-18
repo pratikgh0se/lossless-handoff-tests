@@ -15,7 +15,7 @@ SUB_POST = "Subagent later message after its compaction SUBPOST-MARK"
 # shared append-only/report files that every inject or prove run may touch (F46 health/errors, F47 receipts/proofs, F48 claims)
 SHARED_FILES = ("health.jsonl", "hooks-error.jsonl", "receipts.jsonl", "proofs.jsonl", "proof-report.md", "proof-notice.json",
                 "reconcile.json")
-HANDOFF_EVENTS = ("PreCompact", "SessionStart", "SessionEnd")
+HANDOFF_EVENTS = ("PreCompact", "SessionStart", "SessionEnd", "SubagentStart")  # F58.c amends F46(g) and AC 187
 
 
 class F46Base(F45Base):
@@ -270,6 +270,12 @@ class ManagedHooks(F46Base):
         self.assertEqual(self.triples(d), self.triples(self.template()))
         self.assertFalse(os.path.exists(self.sys_path), "the system file must not be created by install.sh")
 
+    def test_ac187_managed_file_has_the_subagent_start_entry(self):
+        # F58.c amends F46(g): --managed-hooks also writes the SubagentStart entry.
+        d = self.run_managed()
+        cmds = [h.get("command", "") for g in d["hooks"].get("SubagentStart", []) for h in g.get("hooks", [])]
+        self.assertEqual(len([c for c in cmds if c.endswith("postcompact-inject.py --subagent-start")]), 1, cmds)
+
     def test_ac187_keeps_existing_system_keys(self):
         os.makedirs(os.path.dirname(self.sys_path))
         orig = json.dumps({"permissions": {"deny": ["X"]}})
@@ -317,7 +323,7 @@ class Version(unittest.TestCase):
     def test_ac188_hook_version_in_both_hooks(self):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
-                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.12\.0["']""")
+                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.13\.0["']""")
 
 
 class VersionInHealth(F46Base):
@@ -327,8 +333,8 @@ class VersionInHealth(F46Base):
         self.write_transcript([user(PARENT_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.12.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.12.0")
+        self.assertEqual(self.health()["hook_version"], "1.13.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.13.0")
 
 
 if __name__ == "__main__":

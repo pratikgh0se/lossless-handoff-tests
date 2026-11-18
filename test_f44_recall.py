@@ -236,21 +236,30 @@ class RecallBase(HookCase):
 
 # ============================================================ F44.1-F44.4, ACs 137-147 (keyword, embedding off)
 class Recall(RecallBase):
-    def test_ac137_scope_three_sessions_not_private_not_subagent(self):
+    def test_ac137_scope_three_sessions_not_private_default_has_subagent(self):
+        # AC 137 as amended by F57: the subagent hit appears without a flag. hits() skips subagent lines (their id
+        # has a slash), so the subagent hit is checked in the raw output.
         out = self.ok("search", "Pomodoro")
         sids = {m.group("sid") for m in self.hits(out)}
         self.assertEqual(sids, {S1[:8], S2[:8], SUB[:8]})
         self.assertFalse(self.has(out, "PRIVONE"))
-        self.assertFalse(self.has(out, "SUBAGENTONE"))
+        self.assertNotIn("PRIVONE", out)
+        self.assertIn("SUBAGENTONE", out)
         self.assertTrue(self.has(out, "SUBONE"))
         self.assertTrue(self.has(out, "SECOND1"))
         self.assertTrue(self.has(out, "TYPED1"))
 
-    def test_ac137_subagents_flag_adds_the_subagent_hit(self):
-        out = self.ok("search", "Pomodoro", "--subagents")
-        self.assertTrue(self.has(out, "SUBAGENTONE"))
-        self.assertFalse(self.has(out, "PRIVONE"))
+    def test_ac137_no_subagents_flag_removes_the_subagent_hit(self):
+        out = self.ok("search", "Pomodoro", "--no-subagents")
+        self.assertNotIn("SUBAGENTONE", out)
+        self.assertNotIn("PRIVONE", out)
         self.assertTrue(self.has(out, "SUBONE"))
+
+    def test_ac137_subagents_flag_is_accepted_and_changes_nothing(self):
+        out = self.ok("search", "Pomodoro", "--subagents")
+        self.assertEqual(out, self.ok("search", "Pomodoro"))
+        self.assertIn("SUBAGENTONE", out)
+        self.assertNotIn("PRIVONE", out)
 
     def test_scope_from_subdir_cwd_resolves_git_toplevel(self):
         out = self.ok("search", "Pomodoro", cwd=self.sub)
@@ -604,7 +613,8 @@ class Meaning(RecallBase):
         self.assertEqual({p[0] for p in pairs}, {S1[:8], S2[:8], SUB[:8]})
         self.assertGreaterEqual(len(rows), self.n_indexable + 6)  # the 10,000-char message is several chunks
         texts = " ".join(self.fe.all_texts())
-        for bad in ("TOOLRES", "TOOLIN", "PRIVONE", "SUBAGENTONE", "META6", "SUMMARY7", "CAVEAT8", "REMINDERONLY",
+        self.assertIn("SUBAGENTONE", texts)  # F57.c: subagent messages are indexed now
+        for bad in ("TOOLRES", "TOOLIN", "PRIVONE", "META6", "SUMMARY7", "CAVEAT8", "REMINDERONLY",
                     "THINKONLY", "broken json"):
             self.assertNotIn(bad, texts, bad)
         n = len(rows)
@@ -802,8 +812,8 @@ class Hook(_f42.F42):
 
     def test_ac150_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.12.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.12.0")
+        self.assertEqual(self.health()["hook_version"], "1.13.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.13.0")
 
     # ---- AC 158
     def seed_transcript_for_index(self):
