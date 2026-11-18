@@ -39,17 +39,19 @@ class Steer(HookCase):
         r = self.run_event(self.payload("S"))
         self.assertEqual(r.stdout.count(HEAD), 1)
 
-    def test_ac230_custom_instructions_win(self):
+    def test_ac230_custom_instructions_still_print_block(self):
+        # Claude Code adds the hook stdout to a manual /compact text, so the block is printed here too
         p = self.payload("S", trigger="manual")
         p["custom_instructions"] = "keep the API notes"
         r = self.run_event(p)
-        self.assertEqual(r.stdout, "")
+        self.assert_block(r)
         self.assertTrue(os.path.getsize(os.path.join(self.hd, "S-latest.md")) > 0)
 
-    def test_ac230_partner_auto_run_prints_block_in_same_setup(self):
+    def test_ac230_partner_block_printed_once_for_custom_and_auto(self):
         p = self.payload("S", trigger="manual")
         p["custom_instructions"] = "keep the API notes"
-        self.assertEqual(self.run_event(p).stdout, "")
+        r = self.run_event(p)
+        self.assertEqual(r.stdout.count(HEAD), 1)
         self.assert_block(self.run_event(self.payload("S")))
 
     def test_ac231_empty_custom_instructions(self):
@@ -96,11 +98,11 @@ class Steer(HookCase):
         self.run_event(self.payload("S"))
         self.assertEqual(self.health()["steer"], "printed")
 
-    def test_ac235_health_row_custom(self):
+    def test_ac235_health_row_printed_with_custom_instructions(self):
         p = self.payload("S", trigger="manual")
         p["custom_instructions"] = "keep the API notes"
         self.run_event(p)
-        self.assertEqual(self.health()["steer"], "custom")
+        self.assertEqual(self.health()["steer"], "printed")
 
     def test_ac235_health_row_off(self):
         self.run_event(self.payload("S"), extra={"HANDOFF_COMPACT_STEER": "0"})
