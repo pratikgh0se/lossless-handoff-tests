@@ -22,6 +22,10 @@ S1, S2, SUB, PRIV, SA = ("a1a1a1a1-0000-4000-8000-000000000001", "b2b2b2b2-0000-
 SECRET_KEY = "sk-EXAMPLE-NOT-A-KEY"
 HIT_RE = re.compile(r"^(?P<sid>[0-9A-Za-z_-]{2,}):(?P<line>\d+) (?P<date>\d{4}-\d\d-\d\d) (?P<time>\d\d:\d\d) "
                     r"(?P<role>user|assistant|tool)(?: \[(?P<tag>word|meaning|both)\])?: (?P<snip>.*)$")
+# F57.b: a subagent hit has the id <sid8>/<agent8>:<line> and the tag ` [agent <agent8>]` after the source tag.
+HIT_ANY_RE = re.compile(r"^(?P<sid>[0-9A-Za-z_-]{2,})(?:/(?P<agent>[0-9A-Za-z_-]+))?:(?P<line>\d+) (?P<date>\d{4}-\d\d-\d\d) "
+                        r"(?P<time>\d\d:\d\d) (?P<role>user|assistant|tool)(?: \[(?P<tag>word|meaning|both)\])?"
+                        r"(?: \[agent (?P<atag>[0-9A-Za-z_-]+)\])?: (?P<snip>.*)$")
 COUNT_RE = re.compile(r"^(\d+) hits shown of (\d+) \((\d+) sessions searched\)$")
 CUT = "[output cut at 12,000 chars; narrow the search]"
 LONG = "LONGSTART" + "x" * 9984 + "LONGEND"
@@ -335,18 +339,23 @@ class Recall(RecallBase):
         out = self.ok("search", "Pomodoro")
         lines = [l for l in out.rstrip("\n").split("\n") if not l.startswith("mode:")]
         self.assertTrue(lines)
-        hs = [HIT_RE.match(l) for l in lines[:-1]]
+        hs = [HIT_ANY_RE.match(l) for l in lines[:-1]]  # F57: the fixture subagent hit is in the default scope
         self.assertTrue(all(hs), lines)
+        self.assertTrue(any(h.group("agent") and h.group("atag") == h.group("agent") for h in hs), lines)
         m = COUNT_RE.match(lines[-1])
         self.assertTrue(m, lines[-1])
         self.assertEqual(int(m.group(1)), len(hs))
         self.assertGreaterEqual(int(m.group(2)), int(m.group(1)))
-        self.assertEqual(int(m.group(3)), 3)
+        self.assertEqual(int(m.group(3)), 4)  # 3 main transcripts + the subagent transcript (F57)
         stamps = [(h.group("date"), h.group("time")) for h in hs]
         self.assertEqual(stamps, sorted(stamps, reverse=True))
-        self.assertEqual(hs[0].group("date"), "2026-03-03")
-        self.assertEqual((hs[0].group("sid"), hs[0].group("time")), (SUB[:8], "12:01"))
-        self.assertIn("SUBONE", hs[0].group("snip"))
+        # F57: the newest hit is now the fixture subagent hit (2026-03-05); the SUBONE hit is second
+        self.assertEqual((hs[0].group("date"), hs[0].group("time")), ("2026-03-05", "12:01"))
+        self.assertEqual((hs[0].group("sid"), hs[0].group("agent")), (S1[:8], "ab"))
+        self.assertIn("SUBAGENTONE", hs[0].group("snip"))
+        self.assertEqual(hs[1].group("date"), "2026-03-03")
+        self.assertEqual((hs[1].group("sid"), hs[1].group("time")), (SUB[:8], "12:01"))
+        self.assertIn("SUBONE", hs[1].group("snip"))
 
     def test_ac138_line_number_points_at_the_record(self):
         out = self.ok("search", "TYPED1")
@@ -380,7 +389,7 @@ class Recall(RecallBase):
 
     def test_limit_and_count_line(self):
         out = self.ok("search", "Pomodoro", "--limit", "2")
-        self.assertEqual(len(self.hits(out)), 2)
+        self.assertEqual(len([l for l in out.split("\n") if HIT_ANY_RE.match(l)]), 2)  # F57: subagent hits count
         m = self.count_line(out)
         self.assertEqual(m.group(1), "2")
         self.assertGreater(int(m.group(2)), 2)
@@ -537,7 +546,7 @@ class Recall(RecallBase):
         r = self.rc("search", "NOSUCHTHING999")
         self.assertEqual((r.returncode, r.stderr), (0, ""))
         lines = [l for l in r.stdout.rstrip("\n").split("\n") if l and not l.startswith("mode:")]
-        self.assertEqual(lines, ["0 hits shown of 0 (3 sessions searched)"])
+        self.assertEqual(lines, ["0 hits shown of 0 (4 sessions searched)"])
 
     def test_ac145_unknown_id_exit_2(self):
         r = self.rc("open", "deadbeef:1")
@@ -609,8 +618,10 @@ class Meaning(RecallBase):
         self.assertTrue(os.path.isfile(self.sqlite_path()))
         rows = self.rows()
         pairs = {(str(s)[:8], int(l)) for s, l in rows}
-        self.assertEqual(len(pairs), self.n_indexable, sorted(pairs))
-        self.assertEqual({p[0] for p in pairs}, {S1[:8], S2[:8], SUB[:8]})
+        main_pairs = {p for p in pairs if p[0] in (S1[:8], S2[:8], SUB[:8])}
+        self.assertEqual(len(main_pairs), self.n_indexable, sorted(pairs))
+        self.assertEqual({p[0] for p in main_pairs}, {S1[:8], S2[:8], SUB[:8]})
+        self.assertEqual(len(pairs - main_pairs), 1, sorted(pairs))  # F57.c: the one fixture subagent message
         self.assertGreaterEqual(len(rows), self.n_indexable + 6)  # the 10,000-char message is several chunks
         texts = " ".join(self.fe.all_texts())
         self.assertIn("SUBAGENTONE", texts)  # F57.c: subagent messages are indexed now
@@ -626,7 +637,7 @@ class Meaning(RecallBase):
         self.assertEqual(self.index().returncode, 0)
         rows2 = self.rows()
         self.assertEqual(len(rows2), n + 1)
-        self.assertEqual(len({(str(s)[:8], int(l)) for s, l in rows2}), self.n_indexable + 1)
+        self.assertEqual(len({(str(s)[:8], int(l)) for s, l in rows2}), self.n_indexable + 2)  # + subagent row (F57.c)
 
     # ---- AC 152
     def test_ac152_secrets_never_embedded(self):
