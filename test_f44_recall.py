@@ -844,8 +844,8 @@ class Hook(_f42.F42):
 
     def test_ac150_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.14.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.14.0")
+        self.assertEqual(self.health()["hook_version"], "1.14.1")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.14.1")
 
     # ---- AC 158
     def seed_transcript_for_index(self):
