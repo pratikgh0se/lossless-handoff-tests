@@ -692,8 +692,8 @@ class TemplateAndVersion(F42):
 
     def test_ac136_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.13.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.13.0")
+        self.assertEqual(self.health()["hook_version"], "1.13.1")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.13.1")
 
     def test_ac136_health_field_order_with_resolved(self):
         self.go()
