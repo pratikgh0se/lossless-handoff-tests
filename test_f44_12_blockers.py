@@ -1,7 +1,7 @@
 """F44.12 (hooks 1.7.1) ACs 163-166 of specs/handoff-hooks-spec.md (code-blind: written from the spec only)."""
 import json, os, re, time
 import test_f44_recall as R
-from test_f44_recall import RecallBase, Hook, FakeEmbed, RECALL_LINE, _f42
+from test_f44_recall import RecallBase, Hook, FakeEmbed, RECALL_LINE, _f42, canon_lines
 
 SID = "f6f6f6f6-0000-4000-8000-000000000006"
 SENTENCE = (" If recall and the decisions list disagree, the decisions list and the user's latest words win: "
@@ -88,7 +88,7 @@ class Line(Hook):
         self.install_hooks(True)
         r = self.pre_from()
         self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
-        lines = self.latest("S").split("\n")
+        lines = canon_lines(self.latest("S").split("\n"))
         self.assertIn(RECALL_LINE, lines)
         self.assertTrue(RECALL_LINE.endswith(SENTENCE[1:]))
 
@@ -98,7 +98,7 @@ class Line(Hook):
         self.assertEqual(len(lines), 180)
         self.seed(lines)
         outs = [self.post_from(k) for k in (1, 2, 3)]
-        p1 = outs[0].split("\n")
+        p1 = canon_lines(outs[0].split("\n"))
         self.assertEqual(p1.count(RECALL_LINE), 1)
         self.assertIn(SENTENCE[1:], RECALL_LINE)
         self.assertLess(len(outs[0]), 10000)

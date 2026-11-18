@@ -7,7 +7,7 @@ import json, os, re, shutil, subprocess, sys, tempfile, time, unittest
 
 import helpers
 from helpers import HookCase, no_recall, run_install, run_uninstall
-from test_f44_recall import RECALL_LINE, key_for
+from test_f44_recall import RECALL_LINE, key_for, canon, canon_lines
 from test_f55_recall_agent import MARKER, SENTENCE
 from test_content import git
 
@@ -103,7 +103,8 @@ class Content(Base):
         self.assertEqual(lines.count(RULE_B), 1)
         self.assertLess(lines.index(RULE_B), lines.index(RULE_A), "newest rule (D3) must come first")
         recall = [l for l in lines if l.startswith("- recall: ")]
-        self.assertEqual(recall, [RECALL_LINE])
+        self.assertEqual(canon_lines(recall), [RECALL_LINE])
+        lines = canon_lines(lines)
         self.assertLess(lines.index(RULE_A), lines.index(RECALL_LINE), "rules come before the recall line")
         self.assertEqual(lines.index(HEADER), 0)
 
@@ -157,7 +158,7 @@ class Content(Base):
         ctx = self.sub_ctx()
         recall = [l for l in ctx.split("\n") if l.startswith("- recall: ")]
         self.assertEqual(len(recall), 1)
-        self.assertTrue(recall[0].endswith(SENTENCE), recall[0][-300:])
+        self.assertEqual(canon(recall[0], SENTENCE), RECALL_LINE + " " + SENTENCE, recall[0][-300:])
 
     def test_f58a_recall_line_has_no_sentence_for_a_foreign_agent_file(self):
         self.put_agent_file("---\nname: recall\n---\nmine\n")
@@ -218,6 +219,7 @@ class Cut(Base):
         self.assertIn("recall.py", more[0])
         self.assertIn(ledger_path, more[0])
         known = set(lines) | {HEADER, RECALL_LINE, more[0]}
+        out_lines = canon_lines(out_lines)
         self.assertTrue(all(l in known for l in out_lines), [l[:80] for l in out_lines if l not in known])
 
     def test_ac263_no_more_rules_line_when_everything_fits(self):
@@ -234,17 +236,17 @@ class Cut(Base):
 class Empty(Base):
     def test_ac264_no_ledger_only_the_recall_line(self):
         ctx = self.sub_ctx()
-        self.assertEqual(ctx.strip(), RECALL_LINE)
+        self.assertEqual(canon(ctx.strip()), RECALL_LINE)
         self.assertNotIn(HEADER, ctx)
 
     def test_ac264_ledger_without_active_rule_only_the_recall_line(self):
         self.write_ledger([DEC, TASK])
         ctx = self.sub_ctx()
-        self.assertEqual(ctx.strip(), RECALL_LINE)
+        self.assertEqual(canon(ctx.strip()), RECALL_LINE)
 
     def test_ac264_empty_ledger_file_only_the_recall_line(self):
         self.write_ledger([])
-        self.assertEqual(self.sub_ctx().strip(), RECALL_LINE)
+        self.assertEqual(canon(self.sub_ctx().strip()), RECALL_LINE)
 
     @no_recall
     def test_ac264_no_ledger_and_no_recall_script_prints_nothing(self):

@@ -6,7 +6,7 @@ import json, os, re, shutil, subprocess, sys, tempfile, time, unittest
 
 from helpers import HOOKS_DIR, PRE, POST, PLAIN, run_install, run_uninstall
 from test_f45_no_silent_miss import F45Base, iso
-from test_f44_recall import key_for
+from test_f44_recall import key_for, RECALL_LINE, canon
 from test_content import git
 
 MARKER = "<!-- lossless-handoff:recall-agent -->"
@@ -173,14 +173,15 @@ class RecallLine(F45Base):
         self.put_agent(OLD_OURS)
         out = self.compact_ctx()
         line = self.recall_line(out)
-        self.assertTrue(line.endswith(SENTENCE), line[-300:])
+        self.assertEqual(canon(line, SENTENCE), RECALL_LINE + " " + SENTENCE, line[-300:])
         self.assertEqual(out.count(SENTENCE), 1)
 
     def test_ac251_no_sentence_without_agent_file(self):
         out = self.compact_ctx()
         self.assertNotIn(SENTENCE, out)
         self.assertNotIn("recall subagent", out)
-        self.assertTrue(self.recall_line(out).endswith("recall shows history, not current rules."))
+        self.assertTrue(self.recall_line(out).startswith(RECALL_LINE))
+        canon(self.recall_line(out))
 
     def test_ac251_no_sentence_for_file_without_marker(self):
         self.put_agent(FOREIGN)
@@ -193,7 +194,7 @@ class RecallLine(F45Base):
         r = self.run_pre({"session_id": "S", "cwd": self.proj, "trigger": "auto", "transcript_path": self.tpath})
         self.assertEqual(r.returncode, 0, r.stderr)
         line = self.recall_line(self.latest("S"))
-        self.assertTrue(line.endswith(SENTENCE), line[-300:])
+        self.assertEqual(canon(line, SENTENCE), RECALL_LINE + " " + SENTENCE, line[-300:])
 
     def test_f55c_precompact_handoff_without_agent_file_unchanged(self):
         self.write_transcript([{"type": "user", "message": {"content": "Please remember the blue palette decision"}}])
@@ -215,7 +216,7 @@ class RecallLine(F45Base):
         self.assertEqual((r.returncode, r.stderr), (0, ""), r.stdout)
         out = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertIn("D1", out)
-        self.assertTrue(self.recall_line(out).endswith(SENTENCE))
+        self.assertEqual(canon(self.recall_line(out), SENTENCE), RECALL_LINE + " " + SENTENCE)
 
     def test_f55c_ledger_part_one_without_agent_file_unchanged(self):
         self._ledger()

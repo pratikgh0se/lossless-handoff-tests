@@ -15,6 +15,27 @@ RECALL_LINE = ('- recall: earlier chats in this project are searchable word for 
                'refers to something said earlier; quote what you find instead of guessing. '
                'If recall and the decisions list disagree, the decisions list and the user\'s latest words win: recall shows '
                'history, not current rules.')
+
+
+def canon(line, extra=""):
+    """F59.c: the recall line starts with the old exact text and may gain at most one more short sentence.
+    Returns the old text (plus the optional `extra` sentence, e.g. F55.c) after checking the tail."""
+    assert line.startswith(RECALL_LINE), line[:300]
+    rest = line[len(RECALL_LINE):]
+    kept = ""
+    if extra and (" " + extra) in rest:
+        rest = rest.replace(" " + extra, "", 1)
+        kept = " " + extra
+    assert "\n" not in rest and len(rest) <= 250, rest
+    assert len(re.findall(r"[.!?](?:\s|$)", rest)) <= 1, rest
+    assert rest == "" or rest.startswith(" "), rest
+    return RECALL_LINE + kept
+
+
+def canon_lines(lines, extra=""):
+    return [canon(l, extra) if l.startswith("- recall: ") else l for l in lines]
+
+
 ALLOW_RULE = "Bash(python3 ~/.claude/hooks/recall.py:*)"
 S1, S2, SUB, PRIV, SA = ("a1a1a1a1-0000-4000-8000-000000000001", "b2b2b2b2-0000-4000-8000-000000000002",
                          "c3c3c3c3-0000-4000-8000-000000000003", "d4d4d4d4-0000-4000-8000-000000000004",
@@ -777,7 +798,7 @@ class Hook(_f42.F42):
         self.install_hooks(True)
         r = self.pre_from()
         self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
-        lines = self.latest("S").split("\n")
+        lines = canon_lines(self.latest("S").split("\n"))
         self.assertIn(AUTHORITY, lines)
         i = lines.index(AUTHORITY)
         self.assertEqual(lines[i + 1], RECALL_LINE)
@@ -798,7 +819,7 @@ class Hook(_f42.F42):
         lines, kmap = _f42.mixed({"rule": 20, "decision": 100, "task": 60})
         self.seed(lines)
         outs = [self.post_from(k) for k in (1, 2, 3)]
-        p1 = outs[0].split("\n")
+        p1 = canon_lines(outs[0].split("\n"))
         self.assertRegex(p1[0], _f42.HEAD_RE % 1)
         self.assertEqual(p1.count(RECALL_LINE), 1)
         ri = p1.index(RECALL_LINE)
