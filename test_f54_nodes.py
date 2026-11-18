@@ -50,7 +50,7 @@ class Fx:
     def _add(self, kind, content, **kw):
         n = len(self.recs) + 1
         d = {"type": kind, "sessionId": self.sid, "cwd": self.proj, "timestamp": stamp(self.base + n * 60),
-             "uuid": "11111111-2222-4333-8444-%012d" % n, "message": {"role": kind, "content": content}}
+             "uuid": ("11111111-2222-4333-8444-%012d" if not self.agent else "11111111-2222-4333-9444-%012d") % n, "message": {"role": kind, "content": content}}
         if self.agent:
             d.update(isSidechain=True, agentId=self.agent)
         d.update(kw)
@@ -72,7 +72,7 @@ class Fx:
     def boundary(self, pre=150000):
         k = len(self.info) + 1
         n = len(self.recs) + 1
-        uuid = "b0b0b0b0-0000-4000-8000-%012d" % k
+        uuid = ("b0b0b0b0-0000-4000-8000-%012d" % k) if not self.agent else ("b0b0b0b0-a9e7-4000-8000-%012d" % k)  # unique per transcript
         ts = stamp(self.base + n * 60)
         self.recs.append({"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted",
                           "uuid": uuid, "timestamp": ts, "sessionId": self.sid, "cwd": self.proj,
