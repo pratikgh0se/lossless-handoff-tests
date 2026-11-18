@@ -77,6 +77,8 @@ class Fx:
         self.recs.append({"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted",
                           "uuid": uuid, "timestamp": ts, "sessionId": self.sid, "cwd": self.proj,
                           "compactMetadata": {"trigger": "auto", "preTokens": pre + k}})
+        if self.agent:
+            self.recs[-1].update(isSidechain=True, agentId=self.agent)
         self._add("user", summary_text(k), isCompactSummary=True)
         self.info.append({"seq": k, "uuid": uuid, "line": n, "ts": ts, "pre": pre + k,
                           "first": self.last_boundary_line + 1, "last": n - 1, "id": node_id(self.sid, uuid)})

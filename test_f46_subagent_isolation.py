@@ -50,7 +50,7 @@ class F46Base(F45Base):
         for root, dirs, files in os.walk(self.hd):
             dirs[:] = [x for x in dirs if x != "recall"]  # the detached indexer writes there
             for n in files:
-                if "-a-" in n or n in SHARED_FILES or n.startswith("claims-"):
+                if "-a-" in n or n in SHARED_FILES or n.startswith("claims-") or n.startswith("nodes."):  # F54 nodes store
                     continue
                 p = os.path.join(root, n)
                 with open(p, "rb") as f:

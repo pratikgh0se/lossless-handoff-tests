@@ -481,3 +481,15 @@ def heads9(text):
 
 def heads(text):
     return [h for h in SECTIONS if h in text]
+
+
+def strip_node_tail(ctx):
+    """F54.d: when the transcript has a boundary, part 1 ends with the recall line and the summary-node line.
+    Older tests use a fixture handoff that has no recall line and compare the whole output; this removes that
+    F54 tail (and checks its shape) so the rest can be compared exactly as before."""
+    i = ctx.find("\n- recall: ")
+    if i < 0:
+        return ctx
+    tail = ctx[i + 1:].split("\n")
+    assert tail[0].startswith("- recall: ") and tail[-1].startswith("- summary node: ") and len(tail) == 2, tail
+    return ctx[:i]

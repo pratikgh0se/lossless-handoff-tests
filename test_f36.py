@@ -10,14 +10,16 @@ KEYS = ["ts", "sid", "trigger", "agent_file", "stale_sections", "fallback", "sum
         "ledger_superseded", "ledger_resolved", "ledger_restored", "ledger_chars", "ledger_error", "duration_ms",
         "output_chars", "truncated", "errors", "status", "hook_version", "canary_child"]
 # F37.4 adds `inline_cut` (bool); its position is not specified: tests require KEYS in order plus inline_cut anywhere.
-KEYS37 = set(KEYS) | {"inline_cut", "steer"}  # F53 / AC 235 adds `steer`; its position is not specified
+KEYS37 = set(KEYS) | {"inline_cut", "steer", "excerpt_chars", "excerpt_dropped"}  # F56 adds the two excerpt fields  # F53 / AC 235 adds `steer`; its position is not specified
 
 
 def keys_ok(tc, h):
     tc.assertEqual(set(h.keys()), KEYS37)
-    tc.assertEqual([k for k in h.keys() if k not in ("inline_cut", "steer")], KEYS)
+    tc.assertEqual([k for k in h.keys() if k not in ("inline_cut", "steer", "excerpt_chars", "excerpt_dropped")], KEYS)
     tc.assertIn(h["steer"], ("printed", "off"))
     tc.assertIsInstance(h["inline_cut"], bool)
+    tc.assertIsInstance(h["excerpt_chars"], int)
+    tc.assertIsInstance(h["excerpt_dropped"], int)
 TS_RE = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
 IP, NS = f35.IP, f35.NS
 STALE_META = {"agentWrittenAt": f35.NUDGE_MS, "lastNudgeAt": f35.NUDGE_MS, "stale_sections": [IP, NS]}

@@ -2,7 +2,7 @@
 Write early (pending file), recover at SessionStart compact, reconcile, install check. Temp HOME, shim `claude`."""
 import hashlib, json, os, plistlib, re, shutil, signal, subprocess, sys, time, unittest
 
-from helpers import (HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
+from helpers import (strip_node_tail, HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
 
 BOUNDARY = {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted"}
 CHECK_TAIL = " Run the installer again, then restart Claude Code."
@@ -155,7 +155,7 @@ class Recover(F45Base):
         self.put_sidecar(sid=SID, status="ok", age_s=60)
         self.add_health_row(SID, ts=iso(-60))
         ctx = self.part_ctx(1, self.compact_payload())
-        self.assertEqual(ctx, PLAIN + "BODY")
+        self.assertEqual(strip_node_tail(ctx), PLAIN + "BODY")  # F54.d tail allowed
         self.assertNotIn("RECOVERED", ctx)
         self.assertNotIn("DEGRADED", ctx)
         self.assertFalse([r for r in self.health_rows() if r.get("trigger") == "recovered"])

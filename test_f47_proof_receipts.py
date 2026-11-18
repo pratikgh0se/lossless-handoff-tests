@@ -2,7 +2,7 @@
 Receipts written by the SessionStart part 1 inject, and `precompact-handoff.py --prove`. Temp HOME, keyword-only recall."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall, installed_settings, installed_plist
+from helpers import strip_node_tail, HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall, installed_settings, installed_plist
 from test_f45_no_silent_miss import F45Base, BOUNDARY, RECOVERED_HEAD, CHECK_TAIL, iso
 from test_f44_recall import RecallBase, RECALL
 
@@ -91,7 +91,7 @@ class Receipts(ProofBase):
         self.fresh(SID, "RECEIPT-BODY text\n")
         self.tr(self.tpath)
         ctx = self.part_ctx(1, self.compact_payload())
-        self.assertEqual(ctx, PLAIN + "RECEIPT-BODY text")
+        self.assertEqual(strip_node_tail(ctx), PLAIN + "RECEIPT-BODY text")  # F54.d tail allowed
         rows = jl(self.rpath)
         self.assertEqual(len(rows), 1, rows)
         r = rows[0]
@@ -135,7 +135,7 @@ class Receipts(ProofBase):
         self.tr(self.tpath)
         os.mkdir(self.rpath)  # appending must fail
         ctx = self.part_ctx(1, self.compact_payload())
-        self.assertEqual(ctx, PLAIN + "RECEIPT-BODY text")
+        self.assertEqual(strip_node_tail(ctx), PLAIN + "RECEIPT-BODY text")  # F54.d tail allowed
         self.assertGreaterEqual(len(self.errors_lines()), 1)
 
 
