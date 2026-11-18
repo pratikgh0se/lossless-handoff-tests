@@ -109,6 +109,13 @@ class Check(Base):
         self.write_settings({"cleanupPeriodDays": 365})
         self.assert_silent()
 
+    def test_ac220_partner_90_silent_but_30_warns(self):
+        # positive partner: in the same HOME, 90 is silent and 30 warns
+        self.write_settings({"cleanupPeriodDays": 90})
+        self.assert_silent()
+        self.write_settings({"cleanupPeriodDays": 30})
+        self.assert_warns(30)
+
     def test_ac220_value_89_warns(self):
         # boundary: the floor is 90, so 89 is below it
         self.write_settings({"cleanupPeriodDays": 89})
@@ -182,6 +189,13 @@ class Installer(Base):
         self.install("--keep-transcripts=abc", expect=2)
         self.assertEqual(self.read_bytes(), before)
         self.assertFalse(os.path.exists(self.hooks), "usage error must change nothing")
+
+    def test_ac224_partner_valid_value_works_in_same_setup(self):
+        self.seed(30)
+        self.install("--keep-transcripts=10", expect=2)
+        self.install("--keep-transcripts=120")
+        self.assertEqual(self.settings()["cleanupPeriodDays"], 120)
+        self.assert_others_kept()
 
     def test_ac225_dry_run(self):
         self.seed(30)

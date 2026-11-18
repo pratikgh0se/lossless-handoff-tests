@@ -46,6 +46,12 @@ class Steer(HookCase):
         self.assertEqual(r.stdout, "")
         self.assertTrue(os.path.getsize(os.path.join(self.hd, "S-latest.md")) > 0)
 
+    def test_ac230_partner_auto_run_prints_block_in_same_setup(self):
+        p = self.payload("S", trigger="manual")
+        p["custom_instructions"] = "keep the API notes"
+        self.assertEqual(self.run_event(p).stdout, "")
+        self.assert_block(self.run_event(self.payload("S")))
+
     def test_ac231_empty_custom_instructions(self):
         p = self.payload("S", trigger="manual")
         p["custom_instructions"] = ""
@@ -57,6 +63,16 @@ class Steer(HookCase):
         r = self.run_event(self.payload("S"), extra={"HANDOFF_COMPACT_STEER": "0"})
         self.assertEqual(r.stdout, "")
         self.assertTrue(os.path.getsize(os.path.join(self.hd, "S-latest.md")) > 0)
+
+    def test_ac232_partner_default_prints_block_in_same_setup(self):
+        self.assertEqual(self.run_event(self.payload("S"), extra={"HANDOFF_COMPACT_STEER": "0"}).stdout, "")
+        self.assert_block(self.run_event(self.payload("S")))
+
+    def test_ac233_partner_precompact_prints_block_in_same_home(self):
+        r = subprocess.run([sys.executable, POST, "--check"], input="{}", capture_output=True, text=True,
+                           env=self.env(None), timeout=30)
+        self.assertNotIn(HEAD, r.stdout + r.stderr)
+        self.assert_block(self.run_event(self.payload("S")))
 
     def test_ac233_cli_modes_print_no_guidance(self):
         r = subprocess.run([sys.executable, POST, "--check"], input="{}", capture_output=True, text=True,
@@ -75,6 +91,26 @@ class Steer(HookCase):
         r = self.run_event(p)
         self.assert_block(r)
         self.assertTrue(os.path.getsize(os.path.join(self.hd, "S-a-a1-latest.md")) > 0)
+
+    def test_ac235_health_row_printed(self):
+        self.run_event(self.payload("S"))
+        self.assertEqual(self.health()["steer"], "printed")
+
+    def test_ac235_health_row_custom(self):
+        p = self.payload("S", trigger="manual")
+        p["custom_instructions"] = "keep the API notes"
+        self.run_event(p)
+        self.assertEqual(self.health()["steer"], "custom")
+
+    def test_ac235_health_row_off(self):
+        self.run_event(self.payload("S"), extra={"HANDOFF_COMPACT_STEER": "0"})
+        self.assertEqual(self.health()["steer"], "off")
+
+    def test_ac235_subagent_row_printed(self):
+        p = self.payload("S")
+        p["agent_id"] = "a1"
+        self.run_event(p)
+        self.assertEqual(self.health()["steer"], "printed")
 
 
 if __name__ == "__main__":
