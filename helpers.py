@@ -57,6 +57,22 @@ def run_uninstall(home, *args, extra=None, path=None, timeout=180):
     return run_script(UNINSTALL_SH, args, home, extra, path, timeout)
 
 
+PACKAGE_DIR = os.path.join(HOOKS_DIR, "lossless_handoff")
+
+
+def copy_hook_scripts(dest):
+    """Copy the hook scripts (`hooks/*.py`) into `dest`. The PreCompact entry loads the code from the folder
+    `hooks/lossless_handoff/` that sits next to it, so the folder is copied too when the tree under test has it
+    (older trees do not)."""
+    for n in os.listdir(HOOKS_DIR):
+        p = os.path.join(HOOKS_DIR, n)
+        if n.endswith(".py") and os.path.isfile(p):
+            shutil.copy2(p, dest)
+    if os.path.isdir(PACKAGE_DIR):
+        shutil.copytree(PACKAGE_DIR, os.path.join(dest, "lossless_handoff"), dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+
+
 _INSTALLS = {}
 
 

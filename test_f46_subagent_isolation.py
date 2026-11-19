@@ -2,7 +2,7 @@
 Subagent isolation (agent_id hook inputs) and always-on managed hooks. Temp HOME, shim `claude`."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, run_install
+from helpers import copy_hook_scripts, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, run_install
 from test_f45_no_silent_miss import (F45Base, BOUNDARY, RECOVERED_HEAD, CHECK_TAIL, iso)
 
 SID = "S"
@@ -288,10 +288,7 @@ class ManagedHooks(F46Base):
     def test_ac187_check_accepts_precompact_in_managed_file_only(self):
         hooks_home = os.path.join(self.home, ".claude", "hooks")
         os.makedirs(hooks_home)
-        for n in os.listdir(HOOKS_DIR):
-            p = os.path.join(HOOKS_DIR, n)
-            if n.endswith(".py") and os.path.isfile(p):
-                shutil.copy2(p, hooks_home)
+        copy_hook_scripts(hooks_home)
         tpl = installed_settings(self.home)  # what install.sh writes, with this temp HOME in the paths
         managed = {"hooks": {"PreCompact": tpl["hooks"]["PreCompact"]}}
         user_settings = json.loads(json.dumps(tpl))

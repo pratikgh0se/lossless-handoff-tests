@@ -2,7 +2,7 @@
 Write early (pending file), recover at SessionStart compact, reconcile, install check. Temp HOME, shim `claude`."""
 import hashlib, json, os, plistlib, re, shutil, signal, subprocess, sys, time, unittest
 
-from helpers import (strip_node_tail, HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
+from helpers import (copy_hook_scripts, strip_node_tail, HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
 
 BOUNDARY = {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted"}
 CHECK_TAIL = " Run the installer again, then restart Claude Code."
@@ -252,10 +252,7 @@ class Check(F45Base):
         super().setUp()
         self.hooks_home = os.path.join(self.home, ".claude", "hooks")
         os.makedirs(self.hooks_home)
-        for n in os.listdir(HOOKS_DIR):
-            p = os.path.join(HOOKS_DIR, n)
-            if n.endswith(".py") and os.path.isfile(p):
-                shutil.copy2(p, self.hooks_home)
+        copy_hook_scripts(self.hooks_home)
         self.settings = os.path.join(self.home, ".claude", "settings.json")
         self.write_settings()
         self.write_manifest()

@@ -2,7 +2,7 @@
 Receipts written by the SessionStart part 1 inject, and `precompact-handoff.py --prove`. Temp HOME, keyword-only recall."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import strip_node_tail, HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall, installed_settings, installed_plist
+from helpers import copy_hook_scripts, strip_node_tail, HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall, installed_settings, installed_plist
 from test_f45_no_silent_miss import F45Base, BOUNDARY, RECOVERED_HEAD, CHECK_TAIL, iso
 from test_f44_recall import RecallBase, RECALL
 
@@ -425,10 +425,7 @@ class Alert(ProofBase):
         super().setUp()
         self.hooks_home = os.path.join(self.home, ".claude", "hooks")
         os.makedirs(self.hooks_home)
-        for n in os.listdir(HOOKS_DIR):
-            p = os.path.join(HOOKS_DIR, n)
-            if n.endswith(".py") and os.path.isfile(p):
-                shutil.copy2(p, self.hooks_home)
+        copy_hook_scripts(self.hooks_home)
         json.dump(dict(installed_settings(self.home), cleanupPeriodDays=365),  # F52.b off; what install.sh writes, with this temp HOME in the paths
                   open(os.path.join(self.home, ".claude", "settings.json"), "w"))
         files = {n: sha(open(os.path.join(self.hooks_home, n), "rb").read())
