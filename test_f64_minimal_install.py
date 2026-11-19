@@ -130,6 +130,11 @@ def run_install_yes(home, *args, path):
                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=180)
 
 
+def plan(out):
+    """The dry-run text without the `not selected (opt-in: ...)` notes: what the chosen options install."""
+    return "\n".join(l for l in out.split("\n") if "not selected" not in l)
+
+
 def dry_run(*args, home=None, path=None):
     own = home is None
     if own:
@@ -336,7 +341,7 @@ class DryRunAndHelp(unittest.TestCase):
                      "precompact-handoff.py", "postcompact-inject.py", "handoff-nudge.py"):
             self.assertIn(word, out, word)
         for word in (WINDOW, "LaunchAgent", "llm_map", "llm-map", "bge-m3", "ollama pull"):
-            self.assertNotIn(word, out, word)
+            self.assertNotIn(word, plan(out), word)
 
     def test_f64_j_dry_run_window_lists_the_window_only(self):
         r, left = dry_run("--window", "123456", path=self.path)
@@ -344,7 +349,7 @@ class DryRunAndHelp(unittest.TestCase):
         self.assertEqual((r.returncode, left), (0, []), out)
         self.assertRegex(out, WINDOW + r"\s*=?\s*123456")
         for word in ("LaunchAgent", "llm_map", "llm-map", "bge-m3"):
-            self.assertNotIn(word, out, word)
+            self.assertNotIn(word, plan(out), word)
 
     @unittest.skipUnless(IS_MACOS, "the nightly jobs are LaunchAgents on macOS only")
     def test_f64_j_dry_run_nightly_lists_both_jobs_only(self):
@@ -354,7 +359,7 @@ class DryRunAndHelp(unittest.TestCase):
         self.assertIn("recall-index", out)
         self.assertIn("handoff-reconcile", out)
         for word in (WINDOW, "llm_map", "llm-map", "bge-m3"):
-            self.assertNotIn(word, out, word)
+            self.assertNotIn(word, plan(out), word)
 
     def test_f64_j_dry_run_llm_map_lists_hook_and_skill_only(self):
         r, left = dry_run("--llm-map", path=self.path)
@@ -363,7 +368,7 @@ class DryRunAndHelp(unittest.TestCase):
         self.assertIn("llm_map.py", out)
         self.assertIn("SKILL.md", out)
         for word in (WINDOW, "LaunchAgent", "bge-m3"):
-            self.assertNotIn(word, out, word)
+            self.assertNotIn(word, plan(out), word)
 
     def test_f64_j_dry_run_semantic_lists_the_model_pull_and_changes_nothing(self):
         # SAFETY: --dry-run only. A real --semantic run would pull the bge-m3 model from the network.
@@ -372,7 +377,7 @@ class DryRunAndHelp(unittest.TestCase):
         self.assertEqual((r.returncode, left), (0, []), out)
         self.assertIn("bge-m3", out)
         for word in (WINDOW, "LaunchAgent", "llm_map", "llm-map"):
-            self.assertNotIn(word, out, word)
+            self.assertNotIn(word, plan(out), word)
 
     def test_f64_j_dry_run_all_options_lists_every_part(self):
         r, left = dry_run("--window", "123456", "--nightly", "--semantic", "--llm-map", path=self.path)
@@ -444,7 +449,7 @@ class SavedDefaults(OllamaBase):
     def test_f64_n_save_defaults_writes_the_file_with_semantic_on(self):
         self.yes("--semantic", "--yes", "--save-defaults")
         self.assertTrue(os.path.isfile(self.defaults_file()))
-        self.assertRegex(open(self.defaults_file()).read(), r"(?i)semantic")
+        self.assertIn("semantic=1", open(self.defaults_file()).read().split("\n"))  # spec F64.e line format
         self.assertEqual(len(self.pulls()), 1)
 
     def test_f64_n_plain_install_applies_the_saved_semantic_default(self):
@@ -485,9 +490,9 @@ class SavedDefaults(OllamaBase):
 
     def test_f64_n_saved_window_nightly_and_llm_map_apply_to_a_plain_run(self):
         self.install("--window", "250000", "--nightly", "--llm-map", "--save-defaults")
-        text = open(self.defaults_file()).read()
-        for word in ("250000", "llm", "nightly"):
-            self.assertRegex(text, r"(?i)" + word)
+        lines = open(self.defaults_file()).read().split("\n")
+        for want in ("window=250000", "llm_map=1", "nightly=1"):  # spec F64.e line format
+            self.assertIn(want, lines)
         home2 = os.path.join(self.tmp, "home2")
         os.makedirs(os.path.join(home2, ".config", "lossless-handoff"))
         shutil.copy(self.defaults_file(), self.defaults_file(home2))
@@ -510,6 +515,24 @@ class SavedDefaults(OllamaBase):
             r = run_install(h, *args)
             self.assertEqual(r.returncode, 0, args and (r.stdout + r.stderr))
             check(h)
+
+    def test_f64_n_no_flag_with_save_defaults_removes_that_default_from_the_file(self):
+        self.install("--window", "250000", "--nightly", "--llm-map", "--save-defaults")
+        self.install("--no-llm-map", "--no-nightly", "--save-defaults")
+        lines = open(self.defaults_file()).read().split("\n")
+        self.assertNotIn("llm_map=1", lines)
+        self.assertNotIn("nightly=1", lines)
+        self.assertIn("window=250000", lines)
+        # the parts that were installed stay (spec F64.d: a --no-* flag only skips adding a part)
+        self.assertTrue(set(LLM_FILES) <= tree(self.home))
+        self.assertEqual(str(window_of(read_settings(self.home))), "250000")
+
+    def test_f64_n_uninstall_keeps_the_defaults_file_and_purge_deletes_it(self):
+        self.install("--llm-map", "--save-defaults")
+        self.uninstall()
+        self.assertTrue(os.path.isfile(self.defaults_file()), "spec F64.f: uninstall keeps the defaults file")
+        self.uninstall("--purge")
+        self.assertFalse(os.path.exists(self.defaults_file()), "spec F64.f: --purge deletes the defaults file")
 
     def test_f64_n_install_without_save_defaults_writes_no_file(self):
         self.install("--llm-map", "--window", "250000")

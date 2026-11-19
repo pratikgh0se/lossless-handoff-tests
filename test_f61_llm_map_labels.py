@@ -272,7 +272,7 @@ class Skill(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         home = os.path.join(tmp, "home")
         os.makedirs(home)
-        r = run_install(home, "--no-nightly")
+        r = run_install(home, "--no-nightly", "--llm-map")  # F64.a: the skill is opt-in
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         with open(os.path.join(home, ".claude", "skills", "llm-map", "SKILL.md")) as f:
             t = f.read()

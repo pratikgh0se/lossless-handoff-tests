@@ -308,7 +308,8 @@ class Install(unittest.TestCase):
         self.settings = os.path.join(self.home, ".claude", "settings.json")
 
     def install(self, *args):
-        r = run_install(self.home, *args)
+        # F64 (spec F64.a): the llm_map hook and skill are opt-in, so every install in this class adds `--llm-map`
+        r = run_install(self.home, *args, "--llm-map")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         return r
 

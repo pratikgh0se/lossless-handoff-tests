@@ -9,8 +9,8 @@ passwd, secret, token, api_key, apikey or access_key (value masked, key kept). T
 byte-identical. The hooks never write the unmasked value to any state file.
 
 Labels F65.a ... F65.k are provisional AC ids. Every secret below is an obviously fake value built to match a pattern.
-The contract does not list the `<kind>` names, so the tests accept any kind name and check only the shape
-`[REDACTED:<kind>]` (and that the kinds are not all the same). The value of a `key=value` match is replaced; the test
+The kind names are the ones of the F65 section of docs/spec.md (branch minimal-install-redaction): aws, github,
+slack, anthropic, openai, google, jwt, pem, secret. The value of a `key=value` match is replaced; the test
 accepts any separator text between the key and the marker."""
 import glob, json, os, re, shutil, subprocess, sys, unittest
 
@@ -61,12 +61,19 @@ KV = {  # label -> (message text, value that must not survive, key that must sur
     "KVAPIKEY2": ("apikey: zqapikey0006", "zqapikey0006", "apikey"),
     "KVACCESS": ("aws_access_key=zqaccess0007", "zqaccess0007", "aws_access_key"),
 }
+# docs/spec.md F65 (branch minimal-install-redaction) names the kinds: aws, github, slack, anthropic, openai, google, jwt,
+# pem, secret (key=value).
+KIND = {"AWSAKIA": "aws", "AWSASIA": "aws", "GHP": "github", "GHO": "github", "GHU": "github", "GHS": "github",
+        "GHR": "github", "GHPAT": "github", "SLACKB": "slack", "SLACKA": "slack", "SLACKP": "slack",
+        "SLACKR": "slack", "SLACKS": "slack", "ANTHROPIC": "anthropic", "OPENAI": "openai", "GOOGLE": "google",
+        "JWT": "jwt", "PEM": "pem"}
+KIND.update({l: "secret" for l in ("KVPASSWORD", "KVPASSWD", "KVSECRET", "KVTOKEN", "KVAPIKEY", "KVAPIKEY2", "KVACCESS")})
 ALL_RAW = [s for _, forms in SECRETS.values() for s in forms] + [v for _, v, _ in KV.values()]
 CLEAN = [  # near misses and plain prose: must stay byte-identical
     "CLEAN1 the AKIA prefix alone and AKIASHORT are not keys",
     "CLEAN2 sk-short and ghp_short and xoxb-1 and AIzaShort stay as written",
     "CLEAN3 a password policy and a token budget are words, not secrets",
-    "CLEAN4 eyJ alone, and eyJhbGci.only.two? stay as written",
+    "CLEAN4 eyJ alone, and eyJhbGci.only stay as written",
     "CLEAN5 path /usr/local/bin and url https://example.com/a?b=c stay as written",
 ]
 
@@ -116,7 +123,8 @@ class Base(HookCase):
         self.set_shim("merge", out="NO CHANGES")
 
     def go(self, sid="S"):
-        r = self.run_pre(self.payload(sid, cwd=self.root))
+        # fallback=None: the env of the F38/F39 tests that use the summary and the agent handoff (see helpers.env)
+        r = self.run_pre(self.payload(sid, cwd=self.root), fallback=None)
         self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
 
     def convo(self, msgs):
@@ -132,11 +140,20 @@ class Base(HookCase):
 
 # ------------------------------------------------------------------ F65.a-F65.c: PreCompact handoff files
 class Handoff(Base):
+    """One hook run for each secret (the handoff keeps only the last user messages, so one long fixture would push
+    the early messages out). `self.text` is the join of all the handoffs."""
     def setUp(self):
         super().setUp()
-        self.write_transcript(self.convo(fixture_messages()))
-        self.go()
-        self.text = self.latest()
+        self.texts = {}
+        items = [(l, message(l, s)) for l, (s, _) in SECRETS.items()] + [(l, message(l, t)) for l, (t, _, _) in KV.items()]
+        for i, (label, msg) in enumerate(items):
+            self.write_transcript(self.convo([msg]))
+            self.go("L%d" % i)
+            self.texts[label] = self.latest("L%d" % i)
+        self.write_transcript(self.convo(CLEAN))
+        self.go("LC")
+        self.texts["CLEAN"] = self.latest("LC")
+        self.text = "\n".join(self.texts.values())
 
     def test_f65_a_no_raw_secret_in_any_state_file(self):
         self.assertTrue(files_under(self.hd))
@@ -161,9 +178,18 @@ class Handoff(Base):
             self.assertNotIn(line, self.text)
         self.assertRegex(self.text, r"SECRETFIXTURE-PEM\W*\[\[\s*" + MARK + r"\s*\]\]\s*END-PEM")
 
+    def test_f65_b_each_secret_gets_its_spec_kind(self):
+        for label, kind in KIND.items():
+            self.assertRegex(self.text, r"SECRETFIXTURE-%s\W*\[\[\s*(?:[A-Za-z_]+\W{0,4})?\[REDACTED:%s\]" % (label, kind), label)
+
+    def test_f65_b_marking_twice_changes_nothing(self):
+        # spec F65: the function is idempotent, so an already masked text is not masked again
+        self.assertNotIn("[REDACTED:[REDACTED", self.text)
+
     def test_f65_b_markers_have_the_kind_shape_and_the_kinds_differ(self):
         found = MARK_RE.findall(self.text)
         self.assertGreaterEqual(len(found), len(SECRETS) + len(KV) - 2, found)
+        self.assertEqual(set(found) - {"[REDACTED:%s]" % k for k in set(KIND.values())}, set())
         self.assertGreaterEqual(len(set(found)), 6, sorted(set(found)))
 
     def test_f65_c_text_without_secrets_stays_byte_identical(self):
@@ -195,11 +221,12 @@ class HandoffNoSecret(Base):
 # ------------------------------------------------------------------ F65.d: the agent handoff and the summary
 class AgentAndSummary(Base):
     def test_f65_d_secret_in_the_agent_handoff_is_masked_in_latest(self):
-        body = "## Goal\nSECRETFIXTURE-AGENT [[ %s ]] END-AGENT\n## Exact next step\ngo\n" % SECRETS["GHP"][0]
+        body = ("AGENTBODY " * 40 + "\n## Goal\nSECRETFIXTURE-AGENT [[ %s ]] END-AGENT\n## Exact next step\ngo\n") % SECRETS["GHP"][0]
         self.agent_file(body, age_min=1)
         self.write_transcript(self.convo(["plain request"]))
         self.go()
         t = self.latest()
+        self.assertIn("AGENTBODY", t, "fixture: the agent handoff was not copied into latest")
         self.assertNotIn(A36, t)
         self.assertRegex(t, r"SECRETFIXTURE-AGENT\W*\[\[\s*" + MARK + r"\s*\]\]")
         # the agent file was written by the test itself, so every OTHER file must be clean
@@ -305,6 +332,11 @@ class RecallMasks(Base):
         for needle in ALL_RAW:
             self.assertNotIn(needle, out, needle[:24])
         self.assertGreaterEqual(len(set(MARK_RE.findall(out))), 6, out[:500])
+
+    def test_f65_g_search_prints_the_spec_kind_for_each_secret(self):
+        out = self.rc("search", "SECRETFIXTURE", "--limit", "50")
+        for label, kind in KIND.items():
+            self.assertRegex(out, r"SECRETFIXTURE-%s\W*\[\[\s*(?:[A-Za-z_]+\W{0,4})?\[REDACTED:%s\]" % (label, kind), label)
 
     def test_f65_g_search_marker_is_in_place_for_each_kind(self):
         out = self.rc("search", "SECRETFIXTURE", "--limit", "50")

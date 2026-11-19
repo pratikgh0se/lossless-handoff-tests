@@ -100,7 +100,8 @@ def installed_plist(suffix):
     if not IS_MACOS:
         raise unittest.SkipTest("LaunchAgent plists exist on macOS only; the spec gives no exact Linux crontab format")
     import plistlib
-    home, _ = installed_home("--canary")
+    # F64.a: the recall-index and handoff-reconcile jobs are opt-in (`--nightly`); the canary job needs `--canary`.
+    home, _ = installed_home("--canary", "--nightly")
     path = os.path.join(home, "Library", "LaunchAgents", "%s.%s.plist" % (LABEL_PREFIX, suffix))
     assert os.path.isfile(path), "install.sh wrote no %s" % path
     with open(path, "rb") as f:
