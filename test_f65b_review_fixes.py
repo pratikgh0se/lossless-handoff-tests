@@ -370,5 +370,60 @@ class AddOns(Base):
         self.assertNotIn("[REDACTED", t)
 
 
+# ------------------------------------------------------------------ F65.i: every handoff section is masked
+RAW = "Hunter2xx99zz"
+LINE = "password=" + RAW
+
+
+class Sections(Base):
+    """Spec F65: the masking is applied to the dated handoff and the latest copy. One hook run per source, so that no
+    section drops another one. The raw value must be in no file of the state folder; the marker must be in latest."""
+    def run_case(self, entries):
+        self.write_transcript(entries)
+        r = self.run_pre(self.payload("S", cwd=self.proj))
+        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+        text = self.latest("S")
+        found = []
+        for d, _, names in os.walk(self.hd):
+            for n in names:
+                with open(os.path.join(d, n), "rb") as f:
+                    if RAW.encode() in f.read():
+                        found.append(os.path.relpath(os.path.join(d, n), self.hd))
+        self.assertEqual(found, [], "raw value in state files")
+        self.assertNotIn(RAW, text)
+        self.assertIn("[REDACTED:secret]", text)
+        return text
+
+    def base(self):
+        return [user("start the work", timestamp="2026-11-19T10:00:00.000Z")]
+
+    def test_f65_i_last_assistant_message(self):
+        self.run_case(self.base() + [asst("I set " + LINE + " in the config")])
+
+    def test_f65_i_task_create_subject(self):
+        from helpers import tool
+        self.run_case(self.base() + [tool("TaskCreate", subject="rotate " + LINE), asst("ok")])
+
+    def test_f65_i_todo_write_item(self):
+        from helpers import tool
+        self.run_case(self.base() + [tool("TodoWrite", todos=[{"content": "use " + LINE, "status": "pending",
+                                                               "activeForm": "using"}]), asst("ok")])
+
+    def test_f65_i_bash_command(self):
+        from helpers import tool
+        self.run_case(self.base() + [tool("Bash", command="export " + LINE + " && ./run.sh"), asst("ok")])
+
+    def test_f65_i_user_message(self):
+        self.run_case([user("please use " + LINE + " for login", timestamp="2026-11-19T10:00:00.000Z"), asst("ok")])
+
+    def test_f65_i_all_sources_in_one_transcript(self):
+        from helpers import tool
+        self.run_case([user("please use " + LINE + " now", timestamp="2026-11-19T10:00:00.000Z"),
+                       tool("TaskCreate", subject="rotate " + LINE),
+                       tool("TodoWrite", todos=[{"content": "use " + LINE, "status": "pending", "activeForm": "x"}]),
+                       tool("Bash", command="export " + LINE),
+                       asst("I set " + LINE)])
+
+
 if __name__ == "__main__":
     unittest.main()
