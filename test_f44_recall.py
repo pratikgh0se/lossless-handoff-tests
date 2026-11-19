@@ -531,18 +531,19 @@ class Recall(RecallBase):
     # ---- AC 143
     def test_ac143_redaction(self):
         out = self.ok("search", "sk-EXAMPLE")
-        self.assertIn("[redacted]", out)
+        self.assertIn("[REDACTED:openai]", out)
         self.assertNotIn(SECRET_KEY, out)
         out = self.ok("search", "hunter2x")
         self.assertEqual(len(self.hits(out)), 1)
         self.assertEqual(self.count_line(out).group(1), "1")
-        self.assertIn("[redacted]", out)
+        self.assertIn("[REDACTED:secret]", out)
         self.assertNotIn("hunter2x", out)
-        self.assertIn("password=[redacted]", out)
+        self.assertIn("password=[REDACTED:secret]", out)
 
     def test_ac143_redaction_in_open_and_user(self):
         for out in (self.open_id(S1, 10), self.ok("user", "--last", "50")):
-            self.assertIn("[redacted]", out)
+            self.assertIn("[REDACTED:secret]", out)
+            self.assertIn("[REDACTED:openai]", out)
             self.assertNotIn(SECRET_KEY, out)
             self.assertNotIn("hunter2x", out)
 
@@ -668,7 +669,8 @@ class Meaning(RecallBase):
         joined = "\n".join(texts)
         self.assertNotIn("hunter2x", joined)
         self.assertNotIn(SECRET_KEY, joined)
-        self.assertIn("[redacted]", joined)
+        self.assertIn("[REDACTED:secret]", joined)
+        self.assertIn("[REDACTED:openai]", joined)
 
     # ---- AC 153
     def test_ac153_meaning_finds_paraphrase_without_shared_words(self):
@@ -844,8 +846,8 @@ class Hook(_f42.F42):
 
     def test_ac150_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.14.2")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.14.2")
+        self.assertEqual(self.health()["hook_version"], "1.15.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.15.0")
 
     # ---- AC 158
     def seed_transcript_for_index(self):

@@ -425,7 +425,7 @@ class Health(Base):
         self.assertEqual(row["rules"], 2)
         self.assertIsInstance(row["chars"], int)
         self.assertGreater(row["chars"], 0)
-        self.assertEqual(row["hook_version"], "1.14.2")
+        self.assertEqual(row["hook_version"], "1.15.0")
         self.assertGreater(len(ctx), 0)
 
     def test_ac267_each_run_appends_one_row(self):
@@ -442,7 +442,7 @@ class Health(Base):
         row = self.last_row()
         self.assertEqual(row["event"], "subagent_start")
         self.assertEqual(row["rules"], 0)
-        self.assertEqual(row["hook_version"], "1.14.2")
+        self.assertEqual(row["hook_version"], "1.15.0")
 
 
 if __name__ == "__main__":

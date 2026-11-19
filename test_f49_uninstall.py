@@ -149,7 +149,7 @@ class Canary(Base):
 @unittest.skipUnless(IS_MACOS, "LaunchAgents exist on macOS only")
 class LaunchAgents(Base):
     def test_ac206_launchagents_removed(self):
-        self.install()
+        self.install("--nightly")  # F64.a: the nightly jobs are opt-in
         names = [LABEL_PREFIX + ".recall-index.plist", LABEL_PREFIX + ".handoff-reconcile.plist"]
         for n in names:
             self.assertTrue(os.path.isfile(os.path.join(self.agents, n)), n)
@@ -167,7 +167,7 @@ class NoLaunchctl(Base):
     def test_ac207_variable_set_never_calls_launchctl(self):
         self.assertEqual(os.path.realpath(shutil.which("launchctl", path=self.path)),
                          os.path.realpath(os.path.join(self.fb, "launchctl")))
-        self.install("--canary", path=self.path)
+        self.install("--canary", "--nightly", path=self.path)
         if IS_MACOS:
             for j in ("recall-index", "handoff-reconcile", "handoff-canary"):
                 self.assertTrue(os.path.isfile(os.path.join(self.agents, "%s.%s.plist" % (LABEL_PREFIX, j))), j)
@@ -183,7 +183,7 @@ class NoLaunchctl(Base):
         # SAFETY: run_install checks that the FAKE launchctl is first on PATH, then drops the variable. Temp HOME.
         self.assertEqual(os.path.realpath(shutil.which("launchctl", path=self.path)),
                          os.path.realpath(os.path.join(self.fb, "launchctl")))
-        r = run_install(self.home, "--canary", path=self.path, fake_launchctl=self.fb)
+        r = run_install(self.home, "--canary", "--nightly", path=self.path, fake_launchctl=self.fb)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue(os.path.exists(self.log), "the fake launchctl was never called")
         calls = [l.split() for l in open(self.log).read().split("\n") if l.strip()]

@@ -237,7 +237,7 @@ class Meaning(SubFixture, RecallBase):
         self.assertEqual(self.index().returncode, 0)
         joined = "\n".join(self.fe.all_texts())
         self.assertNotIn("hunter2x", joined)
-        self.assertIn("[redacted]", joined)
+        self.assertIn("[REDACTED:secret]", joined)
 
     # ---- AC 260 (meaning side)
     def test_ac260_out_of_scope_subagent_is_never_indexed_or_found_by_meaning(self):
