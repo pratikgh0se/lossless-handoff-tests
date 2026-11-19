@@ -358,6 +358,21 @@ class HealthLog(F36):
 
 
 # ---------------------------------------------------------------- AC 56-60 fail-safe
+def rmtree_retry(path, tries=20):
+    """shutil.rmtree that survives a detached background indexer still writing in the tree (ENOTEMPTY): it retries,
+    and the last try ignores errors. The folder must be gone or empty-enough for the test to rebuild its state."""
+    import time
+    for _ in range(tries):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            time.sleep(0.25)
+    shutil.rmtree(path, ignore_errors=True)
+
+
 class FailSafe(F36):
     def rich(self, pad=40, path_len=100):
         qs = [("Which name?", "Name", ["alpha", "beta"])]
@@ -394,7 +409,7 @@ class FailSafe(F36):
         footer = FOOTER_FMT.format(p=self.tpath)
         for name in ALL_SECTIONS:
             with self.subTest(name):
-                shutil.rmtree(self.hd)
+                rmtree_retry(self.hd)  # a detached background indexer can still write into it
                 self.install_shim(out="HAIKU-TEXT " + "h" * 80)
                 self.put_agent(BODY400, meta=STALE_META)
                 t = self.full_run(extra=fault(name))
