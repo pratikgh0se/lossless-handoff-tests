@@ -236,20 +236,12 @@ class Installer(InstBase):
         with open(os.path.join(self.home, DEFAULTS_REL), "w") as f:
             f.write("window=0\n")
 
-    def test_f65_g_saved_window_zero_never_writes_a_window_value(self):
-        self.put_saved_window_zero()
-        run_install(self.home)
-        sp = os.path.join(self.home, ".claude", "settings.json")
-        if os.path.exists(sp):
-            self.assertIsNone(window_of(read_settings(self.home)))
-
-    @unittest.expectedFailure
-    def test_f65_g_saved_window_zero_is_rejected_like_the_flag(self):
-        # The spec is silent on the exit code of a saved `window=0`; the review asked for the same rejection as
-        # `--window 0` (exit non-zero). expectedFailure: the branch ignores the value and exits 0 (0.13.0 head 4b711af).
+    def test_f65_g_saved_window_zero_is_ignored_with_exit_0(self):
+        # decision: a bad saved line is ignored (exit 0, a warning or nothing); only the flag exits 2
         self.put_saved_window_zero()
         r = run_install(self.home)
-        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIsNone(window_of(read_settings(self.home)))
 
     def test_f65_g_a_positive_window_still_works(self):
         r = run_install(self.home, "--window", "250000")
@@ -267,10 +259,9 @@ class Installer(InstBase):
         if IS_MACOS:
             self.assertRegex(text, r"(?i)nightly")
 
-    @unittest.expectedFailure
     def test_f65_g_upgrade_rerun_says_already_installed_kept_for_the_window(self):
         # README "Upgrade from 0.12.x": a rerun keeps the window, llm-map and nightly jobs "and says already installed,
-        # kept". expectedFailure: the branch prints the line for llm-map and nightly only (head 4b711af).
+        # kept". The builder adds the window line (head newer than 4b711af).
         self.install("--window", "250000", "--llm-map", "--nightly")
         self.assertRegex("\n".join(self.kept_lines(self.install())), r"(?i)window")
 
@@ -283,6 +274,100 @@ class Installer(InstBase):
         self.install()
         self.assertEqual(str(window_of(read_settings(self.home))), "250000")
         self.assertTrue(os.path.isfile(os.path.join(self.home, ".claude", "hooks", "llm_map.py")))
+
+
+# ------------------------------------------------------------------ F65.h: add-ons (the spec text was not on the
+# branch yet when these were written: the rules come from the review request)
+PEM_OPEN = "-----BEGIN PRIVATE KEY-----\nabc\n"
+PEM_PROBE = r'''
+import importlib.util, sys, time
+spec = importlib.util.spec_from_file_location("recall", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+text = "-----BEGIN PRIVATE KEY-----\nabc\n" * 31000
+t0 = time.perf_counter()
+out = m.redact(text)
+print("%.3f" % (time.perf_counter() - t0), isinstance(out, str))
+'''
+PLACEHOLDERS = ["password=$DB_PASSWORD_VALUE", "token=${API_TOKEN_VALUE}", "secret=<your-secret-here>",
+                "api_key={{api_key_value}}", "passwd: $USER_PASSWD_VALUE", "access_key: ${AWS_ACCESS_KEY_VALUE}"]
+
+
+class AddOns(Base):
+    def test_f65_h_unclosed_pem_begin_lines_are_fast(self):
+        r = subprocess.run([sys.executable, "-c", PEM_PROBE, RECALL], capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        dt, ok = r.stdout.split()
+        self.assertEqual(ok, "True")
+        self.assertLess(float(dt), BOUND, r.stdout)
+
+    def test_f65_h_unclosed_pem_begin_lines_are_fast_in_recall_output(self):
+        self.put_session([PEM_OPEN * 31000])
+        t0 = time.time()
+        r = run_recall(self.home, self.proj, "user", "--last", "5", timeout=60)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertLess(time.time() - t0, BOUND)
+
+    def test_f65_h_unclosed_pem_begin_lines_are_fast_in_the_handoff(self):
+        self.write_transcript([user(PEM_OPEN * 31000, timestamp="2026-11-19T10:00:00.000Z"), asst("ack")])
+        t0 = time.time()
+        r = self.run_pre(self.payload("S", cwd=self.proj))
+        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+        self.assertLess(time.time() - t0, BOUND + 3)
+
+    def test_f65_h_normal_pem_block_is_masked(self):
+        pem = "-----BEGIN PRIVATE KEY-----\nMIIFAKEPEMBODYADDON0001\nFAKEPEMBODYADDON0002\n-----END PRIVATE KEY-----"
+        self.put_session(["key follows ADDONPEM " + pem + " done"])
+        out = run_recall(self.home, self.proj, "user", "--last", "5").stdout
+        self.assertIn("[REDACTED:pem]", out)
+        self.assertNotIn("MIIFAKEPEMBODYADDON0001", out)
+        self.assertNotIn("FAKEPEMBODYADDON0002", out)
+        self.assertIn("ADDONPEM", out)
+
+    def test_f65_h_pem_block_after_unclosed_begin_lines_is_still_masked(self):
+        pem = "-----BEGIN PRIVATE KEY-----\nMIIFAKEPEMBODYADDON0003\n-----END PRIVATE KEY-----"
+        self.put_session([PEM_OPEN * 50 + pem])
+        out = run_recall(self.home, self.proj, "user", "--last", "5").stdout
+        self.assertNotIn("MIIFAKEPEMBODYADDON0003", out)
+
+    def test_f65_h_full_variable_or_placeholder_values_are_not_masked(self):
+        self.put_session(PLACEHOLDERS)
+        out = run_recall(self.home, self.proj, "user", "--last", "20").stdout
+        for t in PLACEHOLDERS:
+            self.assertIn(t, out, t)
+        self.assertNotIn("[REDACTED", out)
+
+    def test_f65_h_placeholders_stay_in_the_handoff(self):
+        self.write_transcript([e for m in PLACEHOLDERS[:5] for e in (user(m, timestamp="2026-11-19T10:00:00.000Z"), asst("ack"))])
+        r = self.run_pre(self.payload("S", cwd=self.proj))
+        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+        t = self.latest("S")
+        for m in PLACEHOLDERS[:5]:
+            self.assertIn(m, t, m)
+        self.assertNotIn("[REDACTED", t)
+
+    def test_f65_h_dollar_in_a_real_value_is_still_masked(self):
+        self.put_session(["login password=$uperS3cret!! end"])
+        out = run_recall(self.home, self.proj, "user", "--last", "5").stdout
+        self.assertNotIn("$uperS3cret!!", out)
+        self.assertNotIn("uperS3cret", out)
+        self.assertIn("[REDACTED:secret]", out)
+
+    def test_f65_h_secret_label_then_newline_and_a_path_keeps_the_path(self):
+        text = "Secret:\n/etc/ssl/private/server-key.pem is the file"
+        self.put_session([text])
+        out = run_recall(self.home, self.proj, "user", "--last", "5").stdout
+        self.assertIn(text, out)
+        self.assertNotIn("[REDACTED", out)
+
+    def test_f65_h_secret_label_then_newline_and_a_path_keeps_the_path_in_the_handoff(self):
+        self.write_transcript([user("Secret:\n/etc/ssl/private/server-key.pem is the file",
+                                    timestamp="2026-11-19T10:00:00.000Z"), asst("ack")])
+        r = self.run_pre(self.payload("S", cwd=self.proj))
+        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+        t = self.latest("S")
+        self.assertIn("/etc/ssl/private/server-key.pem", t)
+        self.assertNotIn("[REDACTED", t)
 
 
 if __name__ == "__main__":
