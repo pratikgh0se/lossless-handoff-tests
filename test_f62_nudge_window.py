@@ -2,8 +2,10 @@
 Order: (1) CLAUDE_CODE_AUTO_COMPACT_WINDOW if a positive integer; (2) learned from the pre-compaction token counts of
 the newest compact_boundary records (up to 20) of the current transcript, else of the other transcripts in the same
 project folder; the window is the median plus 33,000, rounded to the nearest 1,000; (3) 200,000.
-Thresholds: first reminder at 75% of the window, then every 25,000; final nudge at window minus 45,000. The health row
-holds `window` and `window_source` ("env", "learned", "default").
+Thresholds: first reminder at 75% of the window, then every 25,000; final nudge at window minus 45,000. The meta file
+holds `window` and `windowSource` ("env", "learned", "default").
+F62.c: the nudge writes `window` and `windowSource` to <sid>-agent.meta.json; the next PreCompact health row copies
+them as `window` and `window_source`.
 Temp HOME. The hook is run from HANDOFF_HOOKS_DIR with a PostToolUse input."""
 import json, os, subprocess, sys, time, unittest
 
@@ -34,6 +36,7 @@ class NudgeBase(HookCase):
         self.proj = os.path.join(self.home, ".claude", "projects", SLUG)
         os.makedirs(self.proj)
         self.n = 0
+        self.last_sid = None
 
     def write_t(self, name, recs, age_s=0):
         p = os.path.join(self.proj, name + ".jsonl")
@@ -54,6 +57,7 @@ class NudgeBase(HookCase):
         if sid is None:
             self.n += 1
             sid = "f62%05d-0000-4000-8000-000000000001" % self.n
+        self.last_sid = sid
         recs = self.boundaries(history) + [usage_entry(ctx)]
         tp = self.write_t(sid, recs)
         if sibling is not None:
@@ -80,31 +84,16 @@ class NudgeBase(HookCase):
     def assertNoNudge(self, out, msg=""):
         self.assertEqual(out.strip(), "", "expected no nudge. " + msg)
 
-    def window_rows(self):
-        """Every JSON object under the state dir that has a `window_source` key (health row or sidecar)."""
-        rows = []
-        for root, _, files in os.walk(self.hd):
-            for n in files:
-                p = os.path.join(root, n)
-                try:
-                    text = open(p).read()
-                except (OSError, UnicodeDecodeError):
-                    continue
-                cands = text.split("\n") if n.endswith(".jsonl") else [text]
-                for c in cands:
-                    try:
-                        d = json.loads(c)
-                    except ValueError:
-                        continue
-                    if isinstance(d, dict) and "window_source" in d:
-                        rows.append(d)
-        return rows
+    def meta(self, sid=None):
+        """<sid>-agent.meta.json of the last probed session (F62.c: the nudge writes `window` and `windowSource`)."""
+        p = os.path.join(self.hd, (sid or self.last_sid) + "-agent.meta.json")
+        self.assertTrue(os.path.exists(p), "no meta file %s" % p)
+        with open(p) as f:
+            return json.load(f)
 
-    def assertWindow(self, window, source):
-        rows = self.window_rows()
-        self.assertTrue(rows, "no health row with window_source under %s" % self.hd)
-        last = rows[-1]
-        self.assertEqual((last.get("window"), last.get("window_source")), (window, source), rows)
+    def assertWindow(self, window, source, sid=None):
+        m = self.meta(sid)
+        self.assertEqual((m.get("window"), m.get("windowSource")), (window, source), m)
 
 
 # ---------------------------------------------------------------- (1) env wins
@@ -152,6 +141,30 @@ class Learned(NudgeBase):
 
     def test_f62_env_negative_learns_window(self):
         self.check_learned("-5")
+
+    def test_f62_env_decimal_learns_window(self):
+        self.check_learned("1.5")
+
+    def test_f62_ac289_unsorted_counts_use_the_median(self):
+        # preTokens 367000, 167000, 267000: median 267000 + 33000 = 300000 (first reminder 225000)
+        h = [367000, 167000, 267000]
+        self.assertNoNudge(self.probe(160000, history=h))
+        self.assertWindow(300000, "learned")
+        self.assertNoNudge(self.probe(224000, history=h))
+        self.assertNudge(self.probe(226000, history=h))
+
+    def test_f62_ac290_sibling_with_three_boundaries(self):
+        self.assertNudge(self.probe(160000, history=[], sibling=[167000, 167000, 167000]))
+        self.assertWindow(200000, "learned")
+
+    def test_f62_ac292_precompact_health_row_copies_window(self):
+        sid = "f62eeeee-0000-4000-8000-000000000001"
+        self.assertNudge(self.probe(301000, history=self.HISTORY, sid=sid))
+        self.write_transcript([{"type": "user", "message": {"content": "keep working on the task"}}])
+        r = self.run_pre(self.payload(sid))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        row = self.health()
+        self.assertEqual((row.get("window"), row.get("window_source")), (400000, "learned"), row)
 
     def test_f62_learned_final_nudge_at_window_minus_45000(self):
         sid = "f62fffff-0000-4000-8000-000000000001"
@@ -223,6 +236,9 @@ class Default(NudgeBase):
     def test_f62_negative_no_history_is_200k(self):
         self.check_default("-5")
 
+    def test_f62_decimal_no_history_is_200k(self):
+        self.check_default("1.5")
+
     def test_f62_default_final_nudge_at_155000(self):
         sid = "f62ddddd-0000-4000-8000-000000000001"
         self.assertNudge(self.probe(151000, sid=sid))
@@ -237,6 +253,12 @@ class FinalOnly(NudgeBase):
         out = self.probe(80000, window="100000")
         self.assertNudge(out)
         self.assertIn(FINAL, out)
+
+    def test_f62_ac291_window_40000_one_final_nudge_then_none(self):
+        sid = "f62ccccc-0000-4000-8000-000000000001"
+        out = self.probe(40000, window="40000", sid=sid)
+        self.assertIn(FINAL, out)
+        self.assertNoNudge(self.probe(41000, window="40000", sid=sid), "the next call sends none")
 
     def test_f62_final_equal_to_first_sends_only_final(self):
         # window 180000: first reminder 135,000; final 135,000

@@ -4,7 +4,9 @@ health.jsonl, (2) compact_boundary records in that session's transcript. Inject 
 `format_drift: true` in reconcile.json with `format_drift_sessions` (session id, inject count, boundary count) and a
 one-line reason. --prove and the claims evaluation mark the affected claims `fail` with reason `format_drift`. The
 SessionStart install check prints exactly one line with "format drift" when the newest reconcile.json has it.
-Inject events are made by running the real postcompact-inject.py (SessionStart compact, part 1)."""
+The inject event is one main-session row (`agent_id` null) in receipts.jsonl (F63.a). Most tests write those rows by hand;
+one test makes the row with the real postcompact-inject.py. Result keys: format_drift, format_drift_sessions
+([{"sid","injects","boundaries"}]), format_drift_reason. Reconcile prints a line starting `format drift:`."""
 import json, os, re, subprocess, sys, unittest
 
 from helpers import installed_settings, user
@@ -45,6 +47,15 @@ class DriftBase(ClaimsBase):
                            text=True, env=self.env(None), timeout=30)
         self.assertEqual((r.returncode, r.stderr), (0, ""), r.stdout)
 
+    def receipts(self, sid, n, tpath, boundary_ts=None):
+        """n main-session inject rows in receipts.jsonl (F63.a field list)."""
+        os.makedirs(self.hd, exist_ok=True)
+        with open(os.path.join(self.hd, "receipts.jsonl"), "a") as f:
+            for i in range(n):
+                f.write(json.dumps({"ts": iso(-60 - i), "sid": sid[:8], "agent_id": None, "key": sid,
+                                    "transcript": tpath, "boundary_ts": boundary_ts, "kind": "normal",
+                                    "handoff_sha256": "0" * 64, "part1_sha256": "1" * 64, "part1_head": "x"}) + "\n")
+
     def reconcile(self):
         r = self.run_pre("--reconcile", "--days", "7")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -55,15 +66,15 @@ class DriftBase(ClaimsBase):
             return json.load(f)
 
     # fixtures
-    def drift_fixture(self):
-        """Session SID: one inject event, 0 boundaries (the format drift case)."""
+    def drift_fixture(self, n=2):
+        """Session SID: n inject rows, 0 boundaries (the format drift case, AC 294)."""
         t = self.transcript(SID, [])
-        self.inject(SID, t)
+        self.receipts(SID, n, t)
 
     def clean_fixture(self):
-        """Session OKSID: one inject event and one boundary."""
+        """Session OKSID: one inject row and one boundary (AC 293)."""
         t = self.transcript(OKSID, [-3600])
-        self.inject(OKSID, t)
+        self.receipts(OKSID, 1, t, boundary_ts=iso(-3600))
 
 
 def flat(x):
@@ -93,7 +104,7 @@ class Reconcile(DriftBase):
 
     def test_f63_a_more_boundaries_than_injects_no_drift(self):
         t = self.transcript(OKSID, [-7200, -3600])
-        self.inject(OKSID, t)
+        self.receipts(OKSID, 1, t)
         j = self.reconcile()
         self.assertIs(j.get("format_drift"), False, j)
 
@@ -104,16 +115,31 @@ class Reconcile(DriftBase):
         sessions = j.get("format_drift_sessions")
         self.assertIsInstance(sessions, list, j)
         self.assertEqual(len(sessions), 1, sessions)
-        assert_lists_session(self, sessions[0], SID, 1, 0)
+        self.assertEqual(sessions, [{"sid": SID[:8], "injects": 2, "boundaries": 0}])  # AC 294
+
+    def test_f63_b_real_inject_row_counts_as_inject_event(self):
+        t = self.transcript(SID, [])
+        self.inject(SID, t)  # postcompact-inject.py writes the receipt row itself
+        j = self.reconcile()
+        self.assertIs(j.get("format_drift"), True, j)
+        self.assertEqual(j["format_drift_sessions"], [{"sid": SID[:8], "injects": 1, "boundaries": 0}])
+
+    def test_f63_b_reconcile_prints_a_format_drift_line(self):
+        self.drift_fixture()
+        r = self.run_pre("--reconcile", "--days", "7")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len([l for l in r.stdout.split("\n") if l.startswith("format drift:")]), 1, r.stdout)
+
+    def test_f63_a_no_drift_prints_no_format_drift_line(self):
+        self.clean_fixture()
+        r = self.run_pre("--reconcile", "--days", "7")
+        self.assertFalse([l for l in r.stdout.split("\n") if l.startswith("format drift:")], r.stdout)
 
     def test_f63_b_reason_is_one_line(self):
         self.drift_fixture()
         j = self.reconcile()
-        reasons = [v for k, v in j.items() if "reason" in k and "drift" in k or k == "format_drift_reason"]
-        reasons = reasons or [v for k, v in j.items() if "reason" in k]
-        self.assertTrue(reasons, "no reason key in reconcile.json: %r" % list(j))
-        self.assertTrue(isinstance(reasons[0], str) and reasons[0].strip() and "\n" not in reasons[0].strip(),
-                        reasons[0])
+        reason = j.get("format_drift_reason")
+        self.assertTrue(isinstance(reason, str) and reason.strip() and "\n" not in reason.strip(), j)
 
     def test_f63_b_only_the_drifting_session_is_listed(self):
         self.clean_fixture()
@@ -122,7 +148,7 @@ class Reconcile(DriftBase):
         self.assertIs(j.get("format_drift"), True, j)
         sessions = j["format_drift_sessions"]
         self.assertEqual(len(sessions), 1, sessions)
-        assert_lists_session(self, sessions[0], SID, 1, 0)
+        self.assertEqual(sessions, [{"sid": SID[:8], "injects": 2, "boundaries": 0}])
         self.assertNotIn(OKSID[:8], json.dumps(sessions))
 
     def test_f63_c_no_injects_no_drift(self):
@@ -142,7 +168,7 @@ class Claims(DriftBase):
         d = {"ts": iso(-10), "days": 30, "compactions": 10, "handoffs": 10, "recovered": 0, "missed": 0,
              "missed_interactive": 0, "missed_headless": 0, "killed": 0, "sessions": [], "format_drift": drift}
         if drift:
-            d["format_drift_sessions"] = [{"sid": SID, "injects": 2, "boundaries": 0}]
+            d["format_drift_sessions"] = [{"sid": SID[:8], "injects": 2, "boundaries": 0}]
             d["format_drift_reason"] = "post-compaction injects recorded but no compact_boundary in the transcript"
         else:
             d["format_drift_sessions"] = []
@@ -153,16 +179,16 @@ class Claims(DriftBase):
         self.prove()
         c = self.status()["C1"]
         self.assertEqual(c["status"], "fail", c)
-        self.assertIn("format_drift", json.dumps(c))
         rep = [l for l in self.report().split("\n") if re.search(r"\bC1\b", l)]
-        self.assertTrue(rep and "fail" in rep[0] and "format_drift" in rep[0], self.report())
+        self.assertTrue(rep and "fail (format_drift)" in rep[0], self.report())
 
     def test_f63_d_claims_flag_shows_the_failure(self):
         self.write_reconcile(True)
         self.prove()
         r = self.run_pre("--claims")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("format_drift", r.stdout)
+        row = [l for l in r.stdout.split("\n") if re.search(r"\bC1\b", l)]
+        self.assertTrue(row and "fail (format_drift)" in row[0], r.stdout)  # AC 297
 
     def test_f63_d_control_no_drift_passes(self):
         self.write_reconcile(False)
@@ -179,7 +205,19 @@ class Claims(DriftBase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         c = self.status()["C1"]
         self.assertEqual(c["status"], "fail", c)
-        self.assertIn("format_drift", json.dumps(c))
+        self.assertTrue(any(re.search(r"\bC1\b", l) and "fail (format_drift)" in l
+                            for l in self.report().split("\n")), self.report())
+
+    def test_f63_d_proof_claim_of_a_drift_session_fails(self):
+        # F63.c: a proof:* claim that counts a check of a receipt of a drift session fails with format_drift
+        self.set_register([claim("C3", "lossless", "proof:lossless")])
+        self.add_proof("lossless", "pass", sid=SID)
+        self.write_reconcile(True)
+        self.prove()
+        c = self.status()["C3"]
+        self.assertEqual(c["status"], "fail", c)
+        self.assertTrue(any(re.search(r"\bC3\b", l) and "fail (format_drift)" in l
+                            for l in self.report().split("\n")), self.report())
 
 
 # ---------------------------------------------------------------- SessionStart install check
@@ -203,6 +241,13 @@ class Check(DriftBase):
         self.assertIs(self.reconcile().get("format_drift"), True)
         out = self.check()
         self.assertEqual(len(self.drift_lines(out)), 1, out)
+        self.assertTrue(self.drift_lines(out)[0].startswith("HANDOFF CHECK: format drift:"), out)
+        self.assertEqual(len(self.drift_lines(self.check())), 1, "F63.d: printed on each run, not once only")
+
+    def test_f63_e_no_inject_rows_prints_no_such_line(self):
+        self.transcript(SID, [])
+        self.assertIs(self.reconcile().get("format_drift"), False)
+        self.assertEqual(self.drift_lines(self.check()), [])
 
     def test_f63_e_no_drift_prints_no_such_line(self):
         self.clean_fixture()
@@ -214,7 +259,7 @@ class Check(DriftBase):
         json.dump({"ts": iso(-10), "days": 7, "compactions": 1, "handoffs": 1, "recovered": 0, "missed": 0,
                    "missed_interactive": 0, "missed_headless": 0, "killed": 0, "sessions": [],
                    "format_drift": True,
-                   "format_drift_sessions": [{"sid": SID, "injects": 1, "boundaries": 0}]},
+                   "format_drift_sessions": [{"sid": SID[:8], "injects": 1, "boundaries": 0}]},
                   open(os.path.join(self.hd, "reconcile.json"), "w"))
         out = self.check()
         self.assertEqual(len(self.drift_lines(out)), 1, out)
