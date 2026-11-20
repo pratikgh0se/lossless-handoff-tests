@@ -13,6 +13,9 @@ from test_content import git
 
 HEADER = ("Project rules for this repo (standing; from the Lossless Handoff decisions list; "
           "the user's latest words win):")
+# F66.b (0.14.0): when rules are injected, the text starts with this line, then the header below it.
+PREAMBLE = ("These are the user's standing rules for the main session of this project. Apply only the rules that fit "
+            "your task. Your task brief comes first.")
 RESTART_LINE = "New hook event (SubagentStart): restart open Claude Code sessions to load it."
 SID = "58585858-0000-4000-8000-000000000058"
 AGENT = "a1b2c3d4e5f6a7b8"
@@ -97,7 +100,7 @@ class Content(Base):
 
     def test_ac261_header_rules_newest_first_recall_line(self):
         ctx = self.sub_ctx()
-        self.assertTrue(ctx.startswith(HEADER), ctx[:200])
+        self.assertTrue(ctx.startswith(PREAMBLE + "\n" + HEADER), ctx[:300])
         lines = ctx.split("\n")
         self.assertEqual(lines.count(RULE_A), 1)
         self.assertEqual(lines.count(RULE_B), 1)
@@ -106,7 +109,8 @@ class Content(Base):
         self.assertEqual(canon_lines(recall), [RECALL_LINE])
         lines = canon_lines(lines)
         self.assertLess(lines.index(RULE_A), lines.index(RECALL_LINE), "rules come before the recall line")
-        self.assertEqual(lines.index(HEADER), 0)
+        self.assertEqual(lines.index(PREAMBLE), 0)
+        self.assertEqual(lines.index(HEADER), 1)
 
     def test_ac261_no_decision_and_no_task(self):
         r = self.sub()
@@ -205,7 +209,7 @@ class Cut(Base):
         ledger_path = self.write_ledger(lines)
         ctx = self.sub_ctx()
         self.assertLessEqual(len(ctx), 4000, len(ctx))
-        self.assertTrue(ctx.startswith(HEADER))
+        self.assertTrue(ctx.startswith(PREAMBLE + "\n" + HEADER))
         out_lines = [l for l in ctx.split("\n") if l.strip()]
         shown = [l for l in out_lines if l.startswith("- D")]
         self.assertTrue(all(l in set(lines) for l in shown), "an entry is cut inside a line")
@@ -218,7 +222,7 @@ class Cut(Base):
         self.assertTrue(more[0].endswith("]"), more[0])
         self.assertIn("recall.py", more[0])
         self.assertIn(ledger_path, more[0])
-        known = set(lines) | {HEADER, RECALL_LINE, more[0]}
+        known = set(lines) | {PREAMBLE, HEADER, RECALL_LINE, more[0]}
         out_lines = canon_lines(out_lines)
         self.assertTrue(all(l in known for l in out_lines), [l[:80] for l in out_lines if l not in known])
 
@@ -261,7 +265,7 @@ class Empty(Base):
     def test_f58b_rules_without_recall_script_have_no_recall_line(self):
         self.write_ledger([RULE_A])
         ctx = self.sub_ctx()
-        self.assertTrue(ctx.startswith(HEADER))
+        self.assertTrue(ctx.startswith(PREAMBLE + "\n" + HEADER))
         self.assertIn("RULEAAA", ctx)
         self.assertNotIn("- recall:", ctx)
 
