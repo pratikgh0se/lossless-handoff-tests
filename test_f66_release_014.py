@@ -4,14 +4,14 @@ F66.a llm_map moves out to https://github.com/pratikgh0se/llm-map. The repo ship
       `--llm-map` and `--no-llm-map` stay accepted, print exactly one line (LLM_LINE) and change nothing else; the exit
       code is the same as without the flag. A saved `llm_map=1` is ignored and prints the same line. `--save-defaults`
       never writes an `llm_map` line and removes an existing one. A re-install keeps an existing llm_map.py or skill and
-      prints KEPT_LINE. Uninstall still removes llm_map files that the manifest lists.
+      prints KEPT_LINE. Uninstall never removes llm_map files (UNINSTALL_KEPT line, decision of 2026-11-20).
 F66.b The SubagentStart rules block starts with PREAMBLE. The main-session injection does not get that line.
 F66.c README has no "Proof" heading or claim and no [C1]-[C8] markers. docs/evidence.md has the markers.
       `--claims-lint` with no argument lints docs/evidence.md. README says that no scored benchmark result is published yet.
 F66.d Product 0.14.0 (install.sh), HOOK_VERSION 1.16.0.
 
 Labels F66.a ... are the ids of the contract. Every install uses a temp HOME (helpers). All seeded llm-map files are fake.
-Assumptions (the contract is silent): uninstall also removes the marked skill file; `--claims-lint` with no argument is
+Assumptions (the contract is silent): `--claims-lint` with no argument is
 compared with the explicit path run from the repo folder; the preamble line is the FIRST line of the SubagentStart text."""
 import glob, hashlib, json, os, re, subprocess, sys, unittest
 
@@ -25,6 +25,8 @@ from test_f64_minimal_install import (Base as InstBase, DEFAULTS_REL, LLM_FILES,
 LLM_LINE = "llm-map is now a separate project: https://github.com/pratikgh0se/llm-map"
 KEPT_LINE = ("llm-map: already installed, kept (now maintained at https://github.com/pratikgh0se/llm-map; "
              "this installer no longer updates it)")
+UNINSTALL_KEPT = ("llm-map: kept (remove it with ./install.sh --uninstall from "
+                  "https://github.com/pratikgh0se/llm-map)")
 PREAMBLE = ("These are the user's standing rules for the main session of this project. Apply only the rules that fit "
             "your task. Your task brief comes first.")
 SUBAGENT_HEADER = ("Project rules for this repo (standing; from the Lossless Handoff decisions list; "
@@ -148,7 +150,11 @@ class Installer(InstBase):
         r = self.install()
         self.assertEqual(count(r, KEPT_LINE), 0)
 
-    def test_f66_a_uninstall_removes_llm_map_files_that_the_manifest_lists(self):
+    def uninstall_kept(self):
+        r = self.uninstall()
+        return r, count(r, UNINSTALL_KEPT)
+
+    def test_f66_a_uninstall_never_removes_llm_map_even_when_the_manifest_lists_it(self):
         self.install()
         before = seed_llm_map(self.home)
         mpath = self.p(".claude/hooks/.handoff-manifest.json")
@@ -157,9 +163,42 @@ class Installer(InstBase):
         m["files"]["llm_map.py"] = hashlib.sha256(before[LLM_FILES[0]]).hexdigest()
         with open(mpath, "w") as f:
             json.dump(m, f)
-        self.uninstall()
-        self.assertFalse(os.path.exists(self.p(LLM_FILES[0])), "llm_map.py listed in the manifest must be removed")
-        self.assertFalse(os.path.exists(self.p(LLM_FILES[1])), "the marked skill file must be removed")
+        r, n = self.uninstall_kept()
+        self.assertEqual(n, 1, r.stdout + r.stderr)
+        for rel, data in before.items():
+            self.assertEqual(self.bytes_of(rel), data, rel)
+
+    def test_f66_a_uninstall_keeps_llm_map_py_alone(self):
+        self.install()
+        before = seed_llm_map(self.home)
+        os.remove(self.p(LLM_FILES[1]))
+        r, n = self.uninstall_kept()
+        self.assertEqual(n, 1, r.stdout + r.stderr)
+        self.assertEqual(self.bytes_of(LLM_FILES[0]), before[LLM_FILES[0]])
+
+    def test_f66_a_uninstall_keeps_a_marked_skill_alone(self):
+        self.install()
+        before = seed_llm_map(self.home)
+        os.remove(self.p(LLM_FILES[0]))
+        r, n = self.uninstall_kept()
+        self.assertEqual(n, 1, r.stdout + r.stderr)
+        self.assertEqual(self.bytes_of(LLM_FILES[1]), before[LLM_FILES[1]])
+
+    def test_f66_a_uninstall_keeps_a_skill_without_the_marker(self):
+        self.install()
+        path = self.p(LLM_FILES[1])
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write("---\nname: llm-map\n---\nMy own skill FOREIGN-MARK\n")
+        r, n = self.uninstall_kept()
+        self.assertEqual(n, 1, r.stdout + r.stderr)
+        self.assertIn("FOREIGN-MARK", open(path).read())
+
+    def test_f66_a_uninstall_without_llm_map_prints_no_kept_line(self):
+        self.install()
+        r, n = self.uninstall_kept()
+        self.assertEqual(n, 0, r.stdout + r.stderr)
+        self.assertNotIn("llm-map: kept", r.stdout + r.stderr)
 
 
 class Repo(unittest.TestCase):
@@ -266,7 +305,7 @@ class Evidence(unittest.TestCase):
         text = read("README.md")
         self.assertRegex(text, r"(?i)no scored benchmark result is published yet")
         self.assertIn("docs/evidence.md", text)
-        self.assertRegex(text, r"(?i)some currently fail")
+        self.assertRegex(text, r"(?i)currently (fail|include failures)")
 
     def lint(self, *args, cwd=None):
         import tempfile, shutil
