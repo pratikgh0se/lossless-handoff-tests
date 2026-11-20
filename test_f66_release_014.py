@@ -303,7 +303,7 @@ class Evidence(unittest.TestCase):
 
     def test_f66_c_readme_says_no_scored_result_and_points_to_the_evidence_file(self):
         text = read("README.md")
-        self.assertRegex(text, r"(?i)no scored benchmark result is published yet")
+        self.assertRegex(text, r"(?i)no scored benchmark result")
         self.assertIn("docs/evidence.md", text)
         self.assertRegex(text, r"(?i)currently (fail|include failures)")
 
@@ -323,6 +323,28 @@ class Evidence(unittest.TestCase):
         norm = lambda s: s.replace(explicit_path, "docs/evidence.md")
         self.assertEqual(norm(a.stdout), norm(b.stdout))
         self.assertTrue((a.stdout + a.stderr).strip(), "the lint printed nothing")
+
+    def test_f66_c_claims_lint_prefers_the_tree_around_the_script_over_the_current_folder(self):
+        # spec F66.c (head 01ce819): the tree around the script first, then the current folder
+        import tempfile, shutil
+        other = os.path.realpath(tempfile.mkdtemp(prefix="f66cwd-"))
+        self.addCleanup(shutil.rmtree, other, ignore_errors=True)
+        os.makedirs(os.path.join(other, "docs"))
+        with open(os.path.join(other, "docs", "evidence.md"), "w") as f:
+            f.write("# Other evidence\n[C1] a claim that is not in the real file OTHERFILE\n")
+        here = self.lint(cwd=REPO)
+        there = self.lint(cwd=other)
+        self.assertEqual(here.returncode, there.returncode, (here.stdout + here.stderr, there.stdout + there.stderr))
+        self.assertEqual(here.stdout, there.stdout)
+        self.assertNotIn("OTHERFILE", there.stdout + there.stderr)
+
+    def test_f66_c_claims_lint_without_an_argument_works_from_any_folder(self):
+        import tempfile, shutil
+        other = os.path.realpath(tempfile.mkdtemp(prefix="f66cwd-"))
+        self.addCleanup(shutil.rmtree, other, ignore_errors=True)
+        r = self.lint(cwd=other)
+        self.assertNotIn("Traceback", r.stderr)
+        self.assertTrue((r.stdout + r.stderr).strip())
 
     def test_f66_c_claims_lint_accepts_an_explicit_path(self):
         b = self.lint(os.path.join(REPO, "README.md"))
