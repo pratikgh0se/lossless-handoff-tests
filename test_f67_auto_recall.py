@@ -16,7 +16,7 @@ F67.d  Each run that passes the trigger appends one JSON line {"ts","session_id"
 F67.e  Product 0.15.0, HOOK_VERSION 1.17.0 (auto-recall.py too).
 
 Assumptions (the contract is silent): stdout may be the plain text or a JSON `hookSpecificOutput.additionalContext` object;
-both are accepted. The `<id>` of the last line is the id of one of the hit lines. Fixtures are fake transcripts in a temp HOME;
+both are accepted. The last line is exact, with a literal `<id>`. Fixtures are fake transcripts in a temp HOME;
 embeddings are off (closed port), so the search is word only."""
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, unittest
 
@@ -30,7 +30,7 @@ HEADER = "Lossless Handoff auto-recall: earlier messages that match your words. 
 KEPT = "auto-recall: already installed, kept"
 HOOK_REL = ".claude/hooks/auto-recall.py"
 HIT_RE = re.compile(r"^- (?P<id>\S+) (?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d) (?P<role>user|assistant): (?P<snip>.*)$")
-OPEN_RE = re.compile(r"^Open one in full: python3 ~/\.claude/hooks/recall\.py open (?P<id>\S+)$")
+OPEN_LINE = "Open one in full: python3 ~/.claude/hooks/recall.py open <id>"  # F67.c: exact text, a literal <id>
 CUES = ["what did i say", "what did we decide", "we decided", "i told you", "i said", "you said", "earlier", "before",
         "last time", "previously", "remember", "as we discussed", "did we", "did i", "which one did", "what was the"]
 
@@ -312,9 +312,7 @@ class Output(HookBase):
         hits = [HIT_RE.match(l) for l in lines[1:-1]]
         self.assertTrue(hits and all(hits), lines)
         self.assertLessEqual(len(hits), 3)
-        om = OPEN_RE.match(lines[-1])
-        self.assertTrue(om, lines[-1])
-        self.assertIn(om.group("id"), [h.group("id") for h in hits])
+        self.assertEqual(lines[-1], OPEN_LINE)
         self.assertTrue(any("billing" in h.group("snip") for h in hits))
 
     def test_f67_c_at_most_three_hits(self):
