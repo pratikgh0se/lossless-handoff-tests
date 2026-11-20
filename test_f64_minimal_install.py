@@ -32,6 +32,20 @@ CORE_SCRIPTS = ("precompact-handoff.py", "postcompact-inject.py", "handoff-nudge
 CORE_FILES = (".claude/hooks/precompact-handoff.py", ".claude/hooks/postcompact-inject.py",
               ".claude/hooks/handoff-nudge.py", ".claude/hooks/recall.py", ".claude/agents/recall.md")
 LLM_FILES = (".claude/hooks/llm_map.py", ".claude/skills/llm-map/SKILL.md")
+LLM_MARK = "<!-- lossless-handoff:llm-map-skill -->"
+
+
+def seed_llm_map(home, text="# old llm_map\n"):
+    """Put an old llm-map install (from a 0.12.x/0.13.x installer) into `home`. Since 0.14.0 (F66.a) no installer
+    writes these files, so a test that needs them seeds them. Returns {relative path: bytes}."""
+    out = {}
+    for rel, body in ((LLM_FILES[0], text), (LLM_FILES[1], LLM_MARK + "\nname: llm-map\n" + text)):
+        path = os.path.join(home, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(body)
+        out[rel] = body.encode()
+    return out
 PLISTS = ("Library/LaunchAgents/%s.recall-index.plist" % LABEL_PREFIX,
           "Library/LaunchAgents/%s.handoff-reconcile.plist" % LABEL_PREFIX)
 WINDOW = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
@@ -273,17 +287,6 @@ class OptIn(unittest.TestCase):
                 d = plistlib.load(f)
             self.assertEqual(d["Label"], os.path.basename(rel)[:-len(".plist")])
 
-    def test_f64_h_llm_map_flag_adds_only_hook_and_skill(self):
-        home, _ = installed_home("--llm-map")
-        self.assertEqual(tree(home), self.base_tree | set(LLM_FILES))
-        s = read_settings(home)
-        self.assertIsNone(window_of(s))
-        self.assertEqual(s["hooks"], self.base_settings["hooks"])
-        self.assertTrue(os.path.getsize(os.path.join(home, LLM_FILES[0])) > 0)
-        with open(os.path.join(home, LLM_FILES[1])) as f:
-            self.assertIn("<!-- lossless-handoff:llm-map-skill -->", f.read())
-
-
 # ------------------------------------------------------------------ F64.i: old flags are accepted and add nothing
 class OldFlags(Base):
     def run_flag(self, *flags):
@@ -328,7 +331,7 @@ class DryRunAndHelp(unittest.TestCase):
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--help")
         self.assertEqual(r.returncode, 0, r.stderr)
-        for f in ("--window", "--nightly", "--semantic", "--save-defaults", "--llm-map", "--no-window", "--no-nightly", "--dry-run"):
+        for f in ("--window", "--nightly", "--semantic", "--save-defaults", "--no-window", "--no-nightly", "--dry-run"):
             self.assertIn(f, r.stdout, f)
         self.assertEqual(sorted(os.listdir(home)), [])
 
@@ -361,12 +364,13 @@ class DryRunAndHelp(unittest.TestCase):
         for word in (WINDOW, "llm_map", "llm-map", "bge-m3"):
             self.assertNotIn(word, plan(out), word)
 
-    def test_f64_j_dry_run_llm_map_lists_hook_and_skill_only(self):
+    def test_f64_j_dry_run_llm_map_flag_plans_no_llm_map_install(self):
+        # F66.a: --llm-map is still accepted but installs nothing
         r, left = dry_run("--llm-map", path=self.path)
         out = r.stdout + r.stderr
         self.assertEqual((r.returncode, left), (0, []), out)
-        self.assertIn("llm_map.py", out)
-        self.assertIn("SKILL.md", out)
+        self.assertNotIn("llm_map.py", plan(out))
+        self.assertNotIn("SKILL.md", plan(out))
         for word in (WINDOW, "LaunchAgent", "bge-m3"):
             self.assertNotIn(word, plan(out), word)
 
@@ -380,10 +384,10 @@ class DryRunAndHelp(unittest.TestCase):
             self.assertNotIn(word, plan(out), word)
 
     def test_f64_j_dry_run_all_options_lists_every_part(self):
-        r, left = dry_run("--window", "123456", "--nightly", "--semantic", "--llm-map", path=self.path)
+        r, left = dry_run("--window", "123456", "--nightly", "--semantic", path=self.path)
         out = r.stdout + r.stderr
         self.assertEqual((r.returncode, left), (0, []), out)
-        for word in (WINDOW, "123456", "bge-m3", "llm_map.py", "SKILL.md"):
+        for word in (WINDOW, "123456", "bge-m3"):
             self.assertIn(word, out, word)
         if IS_MACOS:
             self.assertIn("recall-index", out)
@@ -483,15 +487,15 @@ class SavedDefaults(OllamaBase):
         self.assertNotRegex(out, r"(?i)saved default|install-defaults|from saved")
 
     def test_f64_n_dry_run_with_save_defaults_writes_nothing(self):
-        r = run_install(self.home, "--dry-run", "--save-defaults", "--llm-map", path=self.path)
+        r = run_install(self.home, "--dry-run", "--save-defaults", "--nightly", path=self.path)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertFalse(os.path.exists(self.defaults_file()))
         self.assertEqual(sorted(os.listdir(self.home)), [])
 
-    def test_f64_n_saved_window_nightly_and_llm_map_apply_to_a_plain_run(self):
-        self.install("--window", "250000", "--nightly", "--llm-map", "--save-defaults")
+    def test_f64_n_saved_window_and_nightly_apply_to_a_plain_run(self):
+        self.install("--window", "250000", "--nightly", "--save-defaults")
         lines = open(self.defaults_file()).read().split("\n")
-        for want in ("window=250000", "llm_map=1", "nightly=1"):  # spec F64.e line format
+        for want in ("window=250000", "nightly=1"):  # spec F64.e line format
             self.assertIn(want, lines)
         home2 = os.path.join(self.tmp, "home2")
         os.makedirs(os.path.join(home2, ".config", "lossless-handoff"))
@@ -499,15 +503,14 @@ class SavedDefaults(OllamaBase):
         r = run_install(home2)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(str(window_of(read_settings(home2))), "250000")
-        want = set(LLM_FILES) | (set(PLISTS) if IS_MACOS else set())
+        want = set(PLISTS) if IS_MACOS else set()
         self.assertTrue(want <= tree(home2), sorted(tree(home2)))
 
     def test_f64_n_command_line_flag_wins_and_no_flags_turn_parts_off(self):
-        self.install("--window", "250000", "--nightly", "--llm-map", "--save-defaults")
+        self.install("--window", "250000", "--nightly", "--save-defaults")
         for i, (args, check) in enumerate((
                 (("--window", "300000"), lambda h: self.assertEqual(str(window_of(read_settings(h))), "300000")),
                 (("--no-window",), lambda h: self.assertIsNone(window_of(read_settings(h)))),
-                (("--no-llm-map",), lambda h: self.assertFalse(set(LLM_FILES) & tree(h))),
                 (("--no-nightly",), lambda h: self.assertFalse(set(PLISTS) & tree(h))))):
             h = os.path.join(self.tmp, "h%d" % i)
             os.makedirs(os.path.join(h, ".config", "lossless-handoff"))
@@ -517,31 +520,29 @@ class SavedDefaults(OllamaBase):
             check(h)
 
     def test_f64_n_no_flag_with_save_defaults_removes_that_default_from_the_file(self):
-        self.install("--window", "250000", "--nightly", "--llm-map", "--save-defaults")
-        self.install("--no-llm-map", "--no-nightly", "--save-defaults")
+        self.install("--window", "250000", "--nightly", "--save-defaults")
+        self.install("--no-nightly", "--save-defaults")
         lines = open(self.defaults_file()).read().split("\n")
-        self.assertNotIn("llm_map=1", lines)
         self.assertNotIn("nightly=1", lines)
         self.assertIn("window=250000", lines)
         # the parts that were installed stay (spec F64.d: a --no-* flag only skips adding a part)
-        self.assertTrue(set(LLM_FILES) <= tree(self.home))
         self.assertEqual(str(window_of(read_settings(self.home))), "250000")
 
     def test_f64_n_uninstall_keeps_the_defaults_file_and_purge_deletes_it(self):
-        self.install("--llm-map", "--save-defaults")
+        self.install("--window", "250000", "--save-defaults")
         self.uninstall()
         self.assertTrue(os.path.isfile(self.defaults_file()), "spec F64.f: uninstall keeps the defaults file")
         self.uninstall("--purge")
         self.assertFalse(os.path.exists(self.defaults_file()), "spec F64.f: --purge deletes the defaults file")
 
     def test_f64_n_install_without_save_defaults_writes_no_file(self):
-        self.install("--llm-map", "--window", "250000")
+        self.install("--window", "250000")
         self.assertFalse(os.path.exists(self.defaults_file()))
 
     def test_f64_n_saved_defaults_do_not_change_uninstall(self):
-        self.install("--llm-map", "--save-defaults")
+        self.install("--window", "250000", "--save-defaults")
         self.uninstall()
-        for rel in LLM_FILES + CORE_FILES:
+        for rel in CORE_FILES:
             self.assertFalse(os.path.exists(self.p(rel)), rel)
 
 
@@ -582,28 +583,21 @@ class Rerun(Base):
         for rel in PLISTS:
             self.assertEqual(self.bytes_of(rel), before[rel], rel)
 
-    def test_f64_k_default_rerun_keeps_an_existing_llm_map_install(self):
-        self.install("--llm-map")
-        before = {rel: self.bytes_of(rel) for rel in LLM_FILES}
-        self.install()
-        for rel in LLM_FILES:
-            self.assertEqual(self.bytes_of(rel), before[rel], rel)
-        self.assertEqual(read_settings(self.home)["hooks"], read_settings(installed_home("--llm-map")[0])["hooks"])
-
     def test_f64_k_no_flags_rerun_never_turns_off_an_installed_part(self):
-        self.install("--llm-map", "--window", "250000")
-        for args in (("--no-llm-map",), ("--no-window",), ()):
+        self.install("--window", "250000", "--nightly")
+        for args in (("--no-nightly",), ("--no-window",), ()):
             self.install(*args)
-            self.assertTrue(set(LLM_FILES) <= tree(self.home), args)
+            self.assertTrue(set(PLISTS) <= tree(self.home) or not IS_MACOS, args)
             self.assertEqual(str(window_of(read_settings(self.home))), "250000", args)
 
     def test_f64_k_rerun_with_a_flag_only_adds(self):
         self.install()
         core = tree(self.home)
-        self.install("--llm-map")
-        self.assertEqual(tree(self.home), core | set(LLM_FILES))
+        self.install("--nightly")
+        added = core | (set(PLISTS) if IS_MACOS else set())
+        self.assertEqual(tree(self.home), added)
         self.install("--window", "250000")
-        self.assertEqual(tree(self.home), core | set(LLM_FILES))
+        self.assertEqual(tree(self.home), added)
         self.assertEqual(str(window_of(read_settings(self.home))), "250000")
 
 
@@ -612,13 +606,11 @@ class Uninstall(Base):
     def test_f64_l_uninstall_removes_the_opt_in_parts(self):
         before = {"permissions": {"allow": ["Bash(ls:*)"]}, "env": {"FOO": "1"}}
         self.put_settings(before)
-        self.install("--window", "250000", "--nightly", "--llm-map")
-        self.assertTrue(set(LLM_FILES) <= tree(self.home))
+        self.install("--window", "250000", "--nightly")
         self.assertEqual(str(window_of(read_settings(self.home))), "250000")
         self.uninstall()
-        for rel in LLM_FILES + PLISTS + CORE_FILES:
+        for rel in PLISTS + CORE_FILES:
             self.assertFalse(os.path.exists(self.p(rel)), rel)
-        self.assertFalse(os.path.exists(self.p(".claude/skills/llm-map")))
         with open(self.sp()) as f:
             self.assertEqual(json.load(f), before)
 

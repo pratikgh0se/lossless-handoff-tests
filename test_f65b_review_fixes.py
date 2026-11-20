@@ -19,7 +19,8 @@ import json, os, re, subprocess, sys, time, unittest
 
 from helpers import HOOKS_DIR, HookCase, IS_MACOS, run_install, user, asst
 from test_content import git
-from test_f64_minimal_install import Base as InstBase, DEFAULTS_REL, WINDOW, read_settings, window_of
+from test_f64_minimal_install import (Base as InstBase, DEFAULTS_REL, WINDOW, LLM_FILES, read_settings, seed_llm_map,
+                                      window_of)
 
 RECALL = os.path.join(HOOKS_DIR, "recall.py")
 SAME_NAMES = {}
@@ -253,7 +254,8 @@ class Installer(InstBase):
         return [l for l in (r.stdout + r.stderr).split("\n") if "already installed, kept" in l]
 
     def test_f65_g_upgrade_rerun_says_already_installed_kept_for_llm_map_and_nightly(self):
-        self.install("--window", "250000", "--llm-map", "--nightly")
+        self.install("--window", "250000", "--nightly")
+        seed_llm_map(self.home)  # since 0.14.0 no installer writes llm-map; an old install is seeded
         text = "\n".join(self.kept_lines(self.install()))
         self.assertRegex(text, r"(?i)llm")
         if IS_MACOS:
@@ -262,15 +264,16 @@ class Installer(InstBase):
     def test_f65_g_upgrade_rerun_says_already_installed_kept_for_the_window(self):
         # README "Upgrade from 0.12.x": a rerun keeps the window, llm-map and nightly jobs "and says already installed,
         # kept". The builder adds the window line (head newer than 4b711af).
-        self.install("--window", "250000", "--llm-map", "--nightly")
+        self.install("--window", "250000", "--nightly")
         self.assertRegex("\n".join(self.kept_lines(self.install())), r"(?i)window")
 
     def test_f65_g_first_install_does_not_say_already_installed(self):
-        r = self.install("--window", "250000", "--llm-map")
+        r = self.install("--window", "250000")
         self.assertNotIn("already installed, kept", r.stdout + r.stderr)
 
     def test_f65_g_upgrade_rerun_keeps_the_parts(self):
-        self.install("--window", "250000", "--llm-map")
+        self.install("--window", "250000")
+        seed_llm_map(self.home)
         self.install()
         self.assertEqual(str(window_of(read_settings(self.home))), "250000")
         self.assertTrue(os.path.isfile(os.path.join(self.home, ".claude", "hooks", "llm_map.py")))
