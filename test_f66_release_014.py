@@ -361,7 +361,7 @@ class Evidence(unittest.TestCase):
 
 # ------------------------------------------------------------------ F66.d versions
 class Versions(unittest.TestCase):
-    def test_f66_d_install_sh_version_is_0_14_0(self):
+    def test_f66_d_install_sh_version_is_0_15_0(self):
         import tempfile, shutil
         home = os.path.realpath(tempfile.mkdtemp(prefix="f66v-"))
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
@@ -370,21 +370,21 @@ class Versions(unittest.TestCase):
         self.assertIn("0.15.0", r.stdout + r.stderr)
         self.assertEqual(sorted(os.listdir(home)), [])
 
-    def test_f66_d_installed_manifest_version_is_1_16_0(self):
+    def test_f66_d_installed_manifest_version_is_1_17_0(self):
         home, _ = helpers.installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
             self.assertEqual(json.load(f)["version"], "1.17.0")
 
-    def test_f66_d_changelog_has_0_14_0_first(self):
+    def test_f66_d_changelog_has_0_15_0_first(self):
         heads = re.findall(r"(?m)^## \[([0-9.]+)\]", read("CHANGELOG.md"))
         self.assertEqual(heads[0], "0.15.0")
 
-    def test_f66_d_hook_version_constants_are_1_16_0(self):
+    def test_f66_d_hook_version_constants_are_1_17_0(self):
         # a constant in each entry file (the file has no other `HOOK_VERSION = ` assignment with a version)
         for n in ("precompact-handoff.py", "postcompact-inject.py"):
             with open(os.path.join(HOOKS_DIR, n)) as f:
                 src = f.read()
-            self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.16\.0["']""", n)
+            self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.17\.0["']""", n)
 
 
 if __name__ == "__main__":

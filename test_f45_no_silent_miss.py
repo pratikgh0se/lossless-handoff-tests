@@ -353,7 +353,7 @@ class Wiring(unittest.TestCase):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
                 src = open(path).read()
-                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.16\.0["']""")
+                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.17\.0["']""")
 
 
 class VersionInHealth(F45Base):
