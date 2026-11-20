@@ -367,17 +367,17 @@ class Versions(unittest.TestCase):
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--version")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.14.0", r.stdout + r.stderr)
+        self.assertIn("0.15.0", r.stdout + r.stderr)
         self.assertEqual(sorted(os.listdir(home)), [])
 
     def test_f66_d_installed_manifest_version_is_1_16_0(self):
         home, _ = helpers.installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.16.0")
+            self.assertEqual(json.load(f)["version"], "1.17.0")
 
     def test_f66_d_changelog_has_0_14_0_first(self):
         heads = re.findall(r"(?m)^## \[([0-9.]+)\]", read("CHANGELOG.md"))
-        self.assertEqual(heads[0], "0.14.0")
+        self.assertEqual(heads[0], "0.15.0")
 
     def test_f66_d_hook_version_constants_are_1_16_0(self):
         # a constant in each entry file (the file has no other `HOOK_VERSION = ` assignment with a version)
