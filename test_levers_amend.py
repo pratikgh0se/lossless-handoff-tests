@@ -417,35 +417,97 @@ class McpAmend(HookBase):
         self.assertEqual(mode(os.path.join(self.hd, "recall-mcp.jsonl")), 0o600)
 
 
+FAKE_CLAUDE = r"""#!/bin/sh
+# A fake `claude mcp` CLI with state in a file: add / get / list / remove, and a log of every call.
+LOG=%(log)s
+STATE=%(state)s
+echo "claude $*" >> "$LOG"
+case "$1 $2" in
+"mcp add")
+  shift 2; name=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --scope) shift 2 ;;
+      --) shift; break ;;
+      *) [ -z "$name" ] && name="$1"; shift ;;
+    esac
+  done
+  echo "$name $*" >> "$STATE"; exit 0 ;;
+"mcp get")
+  if grep -q "^$3 " "$STATE" 2>/dev/null; then grep "^$3 " "$STATE"; exit 0; fi
+  echo "No MCP server found with name: $3" >&2; exit 1 ;;
+"mcp list")
+  cat "$STATE" 2>/dev/null; exit 0 ;;
+"mcp remove")
+  if grep -q "^$3 " "$STATE" 2>/dev/null; then grep -v "^$3 " "$STATE" > "$STATE.tmp"; mv "$STATE.tmp" "$STATE"; exit 0; fi
+  echo "No MCP server found with name: $3" >&2; exit 1 ;;
+esac
+exit 0
+"""
+
+
 class McpRerun(unittest.TestCase):
-    """A re-install, when the server is already registered, prints `recall-mcp: already installed, kept` and runs no
-    second `claude mcp add`. The fake `claude` records its calls and exits 0 for every call."""
+    """The installer may ask the `claude` CLI if the server is registered. The fake `claude` keeps the registered servers
+    in a file, like the real CLI. A re-install, when the server is registered, prints `recall-mcp: already installed, kept`
+    and runs no second `claude mcp add`. If the server was removed outside the installer, a re-install adds it again."""
+
+    def setUp(self):
+        import shutil, tempfile
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="lev-r-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.home = os.path.join(self.tmp, "home")
+        os.makedirs(self.home)
+        bindir = os.path.join(self.tmp, "fakebin")
+        os.makedirs(bindir)
+        self.log = os.path.join(self.tmp, "claude.log")
+        self.state = os.path.join(self.tmp, "claude.state")
+        with open(os.path.join(bindir, "claude"), "w") as f:
+            f.write(FAKE_CLAUDE % {"log": self.log, "state": self.state})
+        os.chmod(os.path.join(bindir, "claude"), 0o755)
+        self.path = bindir + ":/usr/bin:/bin"
+
+    def adds(self):
+        return [l for l in open(self.log).read().split("\n") if l.startswith("claude mcp add")]
+
+    def install(self, *args):
+        r = run_install(self.home, *args, path=self.path)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r.stdout + r.stderr
+
+    def test_f69_fake_cli_behaves_like_the_real_one(self):
+        # a self-check of the fake: add, get, list, remove
+        sh = os.path.join(self.tmp, "fakebin", "claude")
+        run = lambda *a: subprocess.run([sh, *a], capture_output=True, text=True)
+        self.assertEqual(run("mcp", "get", "x").returncode, 1)
+        self.assertEqual(run("mcp", "add", "--scope", "user", "x", "--", "python3", "/a/b.py").returncode, 0)
+        g = run("mcp", "get", "x")
+        self.assertEqual(g.returncode, 0)
+        self.assertIn("python3 /a/b.py", g.stdout)
+        self.assertIn("x ", run("mcp", "list").stdout)
+        self.assertEqual(run("mcp", "remove", "x", "--scope", "user").returncode, 0)
+        self.assertEqual(run("mcp", "remove", "x", "--scope", "user").returncode, 1)
 
     def test_f69_rerun_does_not_add_again_and_prints_the_kept_line(self):
-        import shutil, tempfile
-        tmp = os.path.realpath(tempfile.mkdtemp(prefix="lev-r-"))
-        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        home = os.path.join(tmp, "home")
-        os.makedirs(home)
-        bindir = os.path.join(tmp, "fakebin")
-        os.makedirs(bindir)
-        log = os.path.join(tmp, "claude.log")
-        with open(os.path.join(bindir, "claude"), "w") as f:
-            f.write("#!/bin/sh\nprintf '%%s\\n' \"claude $*\" >> %s\nexit 0\n" % log)
-        os.chmod(os.path.join(bindir, "claude"), 0o755)
-        path = bindir + ":/usr/bin:/bin"
-        r1 = run_install(home, "--recall-mcp", path=path)
-        self.assertEqual(r1.returncode, 0, r1.stdout + r1.stderr)
-        calls = lambda: [l for l in open(log).read().split("\n") if l.startswith("claude mcp add")]
-        self.assertEqual(len(calls()), 1, open(log).read())
-        r2 = run_install(home, path=path)
-        self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
-        self.assertEqual(len([l for l in (r2.stdout + r2.stderr).split("\n") if l.startswith("recall-mcp: already installed, kept")]), 1,
-                         r2.stdout + r2.stderr)
-        self.assertEqual(len(calls()), 1, "a second `claude mcp add` ran:\n" + open(log).read())
-        r3 = run_install(home, "--recall-mcp", path=path)
-        self.assertEqual(r3.returncode, 0, r3.stdout + r3.stderr)
-        self.assertEqual(len(calls()), 1, "a third install with the flag ran `claude mcp add` again")
+        self.install("--recall-mcp")
+        self.assertEqual(len(self.adds()), 1, open(self.log).read())
+        out = self.install()
+        self.assertEqual(len([l for l in out.split("\n") if l.startswith("recall-mcp: already installed, kept")]), 1, out)
+        self.assertEqual(len(self.adds()), 1, "a second `claude mcp add` ran:\n" + open(self.log).read())
+        self.install("--recall-mcp")
+        self.assertEqual(len(self.adds()), 1, "a second install with the flag ran `claude mcp add` again")
+
+    def test_f69_a_server_removed_outside_the_installer_is_added_again(self):
+        self.install("--recall-mcp")
+        open(self.state, "w").close()  # removed outside the installer
+        self.install("--recall-mcp")
+        self.assertEqual(len(self.adds()), 2, open(self.log).read())
+        self.assertIn("lossless-recall", open(self.state).read())
+
+    def test_f69_uninstall_removes_the_server_from_the_cli_state(self):
+        self.install("--recall-mcp")
+        r = run_uninstall(self.home, path=self.path)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("lossless-recall", open(self.state).read())
 
 
 if __name__ == "__main__":
