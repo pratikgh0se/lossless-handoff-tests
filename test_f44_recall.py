@@ -765,7 +765,7 @@ class Meaning(RecallBase):
 class Hook(_f42.F42):
     def install_hooks(self, with_recall, real=False):
         dest = os.path.join(self.home, ".claude", "hooks")
-        shutil.copytree(HOOKS_DIR, dest, ignore=shutil.ignore_patterns("recall.py", "__pycache__"))
+        shutil.copytree(HOOKS_DIR, dest, ignore=shutil.ignore_patterns("recall.py", "recall-mcp.py", "__pycache__"))
         if with_recall:
             if real and os.path.isfile(RECALL):
                 shutil.copy(RECALL, os.path.join(dest, "recall.py"))
@@ -846,8 +846,8 @@ class Hook(_f42.F42):
 
     def test_ac150_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.17.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.17.0")
+        self.assertEqual(self.health()["hook_version"], "1.18.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.18.0")
 
     # ---- AC 158
     def seed_transcript_for_index(self):

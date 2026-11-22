@@ -98,7 +98,7 @@ class WriteEarly(F45Base):
         for k in ("ts", "trigger", "hook_version"):
             self.assertIn(k, d)
         self.assertEqual(d["trigger"], "auto")
-        self.assertEqual(d["hook_version"], "1.17.0")
+        self.assertEqual(d["hook_version"], "1.18.0")
         self.assertIn("PREBOUNDARY-MARK", self.latest())
         found = [pth for pth, txt in self.all_hd_text() if "PREBOUNDARY-MARK" in txt and pth.endswith(".md")]
         self.assertGreaterEqual(len(found), 1)
@@ -353,7 +353,7 @@ class Wiring(unittest.TestCase):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
                 src = open(path).read()
-                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.17\.0["']""")
+                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.18\.0["']""")
 
 
 class VersionInHealth(F45Base):
@@ -361,8 +361,8 @@ class VersionInHealth(F45Base):
         self.write_transcript([user(PRE_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.17.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.17.0")
+        self.assertEqual(self.health()["hook_version"], "1.18.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.18.0")
 
 
 if __name__ == "__main__":
