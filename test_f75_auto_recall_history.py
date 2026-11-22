@@ -1,6 +1,6 @@
 """F75 Auto-recall identifier history mode (amends F67.c; the F67.b trigger does not change). Code-blind: written from
 contract-0.17.md only. An identifier is a token in backticks, or a token of 3+ characters with `-`, `_`, `.` or `/` inside
-(a URL is not one). With 1+ identifiers the hook injects the F73 history of the first 3 (1,500 characters each, 4,000 in
+(a URL is not one). With 1+ identifiers the hook injects the F73 history of the first 3 (2,000 characters each, 4,000 in
 total); with none it runs the F67.c word search without the stop-list words. The health row adds `mode` and
 `identifiers` (a count, never the text)."""
 import json, os, re, shutil, subprocess, sys, time, unittest
@@ -253,8 +253,9 @@ class PromptRecord(Base):
     def test_f75_amend_a_short_prompt_matches_by_equal_text_only(self):
         short = "previously a-b-c"
         self.assertLess(len(short), 20)
-        recs = self.chain("a-b-c", 2) + [entry("user", short, "cur", ts(20)),
-                                         entry("user", "see: previously a-b-c ok DECORATED", "dec", ts(22))]
+        # the prompt record is the last user record when the hook runs; an earlier decorated record is an ordinary message
+        recs = self.chain("a-b-c", 2) + [entry("user", "see: previously a-b-c ok DECORATED", "dec", ts(15)),
+                                         entry("user", short, "cur", ts(20))]
         self.put(SID1, recs)
         out = self.ctx(short)
         self.assertIn("DECORATED", out, "a short prompt is matched by equal text only")
@@ -266,24 +267,76 @@ class PromptRecord(Base):
         self.assertIn("LASTREC", out)
 
 
+class Groups(Base):
+    """Auto-recall amendment 2: the identifier order is (1) backticked regex-form tokens, (2) other regex-form tokens that
+    hold a digit, `_`, `.` or `/`, (3) plain lowercase hyphen compounds, (4) other backticked tokens. Inside a group:
+    prompt order. Only the first 3 that have a mention are shown."""
+
+    def put_keys(self, keys):
+        recs = []
+        for i, k in enumerate(keys):
+            recs += self.chain(k, 2, start=i * 3)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(55))])
+
+    def test_f75_amend2_group_1_backticked_regex_form_comes_first(self):
+        self.put_keys(["dry-run", "max_val", "invoice-mailer"])
+        out = self.ctx("what did we decide about dry-run and max_val and `invoice-mailer`")
+        self.assertEqual(self.blocks(out), ["invoice-mailer", "max_val", "dry-run"], out)
+
+    def test_f75_amend2_group_2_digit_underscore_dot_slash_before_plain_hyphen_compounds(self):
+        for first in ("v2.5", "beta_two", "conf/app", "build-7"):
+            with self.subTest(first):
+                self.put_keys(["dry-run", "follow-up", first])
+                out = self.ctx("what did we decide about dry-run and follow-up and %s" % first)
+                self.assertEqual(self.blocks(out), [first, "dry-run", "follow-up"], out)
+
+    def test_f75_amend2_inside_a_group_prompt_order_holds(self):
+        self.put_keys(["max_val", "v2.5", "conf/app"])
+        out = self.ctx("what did we decide about v2.5 and conf/app and max_val")
+        self.assertEqual(self.blocks(out), ["v2.5", "conf/app", "max_val"], out)
+
+    def test_f75_amend2_group_3_plain_hyphen_compounds_before_other_backticked_tokens(self):
+        self.put_keys(["Zeta", "dry-run", "follow-up"])
+        out = self.ctx("what did we decide about `Zeta` and dry-run and follow-up")
+        self.assertEqual(self.blocks(out), ["dry-run", "follow-up", "Zeta"], out)
+
+    def test_f75_amend2_the_four_groups_in_order_with_a_limit_of_3(self):
+        self.put_keys(["Zeta", "dry-run", "max_val", "invoice-mailer"])
+        out = self.ctx("what did we decide about `Zeta` and dry-run and max_val and `invoice-mailer`")
+        self.assertEqual(self.blocks(out), ["invoice-mailer", "max_val", "dry-run"], out)
+        self.assertNotIn("Zeta", out)
+
+
 class Caps(Base):
     def long(self, key, n=40, start=0):
         return [entry("user", "%s step %03d %s" % (key, i, "x" * 150), "%s-%d" % (key, i), ts((start + i) % 60, hour=1 + (start + i) // 60))
                 for i in range(n)]
 
-    def test_f75_one_identifier_block_is_at_most_1500_characters_with_the_middle_cut(self):
+    def test_f75_one_identifier_block_is_at_most_2000_characters_with_the_middle_cut(self):
         self.put(SID1, self.long("invoice-mailer") + [entry("user", "x", "cur", ts(0, day=3))])
         out = self.ctx("what did we decide about invoice-mailer")
         ls = out.split("\n")
         start = ls.index(HIST_LINE1 % ("invoice-mailer", 40))
         end = max(i for i, l in enumerate(ls) if OMIT_RE.match(l) or ENTRY_RE.match(l))
         block = "\n".join(ls[start:end + 1])
-        self.assertLessEqual(len(block), 1500, len(block))
+        self.assertLessEqual(len(block), 2000, len(block))
         self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 1, out)
         self.assertIn("step 000", ls[start + 1])
         self.assertIn("step 001", ls[start + 2])
         self.assertIn("step 039", ls[end], "the newest entry is kept")
         self.assertTrue(FULL_RE.match(ls[-1]))
+
+    def test_f75_shrink_steps_keep_every_mention_inside_2000_characters(self):
+        self.put(SID1, [entry("user", "The invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 300, i), "u%d" % i, ts(i))
+                        for i in range(8)] + [entry("user", "x", "cur", ts(0, day=3))])
+        out = self.ctx("what did we decide about invoice-mailer")
+        ls = out.split("\n")
+        start = ls.index(HIST_LINE1 % ("invoice-mailer", 8))
+        ents = [l for l in ls if ENTRY_RE.match(l)]
+        self.assertEqual(len(ents), 8, out)
+        self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 0, "a window fits: no middle cut")
+        self.assertLessEqual(len("\n".join(ls[start:start + 1 + 8])), 2000)
+        self.assertNotIn("ENDMARK", out)
 
     def test_f75_three_identifiers_stay_within_4000_characters_in_total(self):
         recs = []
@@ -294,9 +347,32 @@ class Caps(Base):
         self.assertLessEqual(len(out), 4000, len(out))
         got = self.blocks(out)
         self.assertEqual(got, ["alpha-one", "beta-two", "gamma-three"][:len(got)], "blocks keep prompt order")
-        self.assertGreaterEqual(len(got), 2, "1,500 + 1,500 fit in 4,000")
+        self.assertGreaterEqual(len(got), 1)
         self.assertEqual(out.split("\n")[0], HIST_HEADER)
         self.assertTrue(FULL_RE.match(out.split("\n")[-1]))
+
+    def test_f75_a_third_identifier_is_shown_only_if_it_fits_whole(self):
+        recs = []
+        for i, k in enumerate(("alpha-one", "beta-two")):
+            recs += self.long(k, 40, start=i * 40)
+        recs += self.chain("gamma-three", 3, start=50)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(0, day=3))])
+        out = self.ctx("what did we decide about alpha-one beta-two gamma-three")
+        self.assertLessEqual(len(out), 4000, len(out))
+        ls = out.split("\n")
+        if "gamma-three" in self.blocks(out):
+            i = [j for j, l in enumerate(ls) if l.startswith("history of gamma-three:")][0]
+            tail = [l for l in ls[i:] if ENTRY_RE.match(l) or OMIT_RE.match(l)]
+            self.assertEqual(len([l for l in tail if ENTRY_RE.match(l)]), 3, "whole: all 3 entries")
+            self.assertFalse(any(OMIT_RE.match(l) for l in tail), "whole: no middle cut")
+
+    def test_f75_three_small_blocks_are_all_shown(self):
+        recs = []
+        for i, k in enumerate(("alpha-one", "beta-two", "gamma-three")):
+            recs += self.chain(k, 3, start=i * 4)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(30))])
+        out = self.ctx("what did we decide about alpha-one beta-two gamma-three")
+        self.assertEqual(self.blocks(out), ["alpha-one", "beta-two", "gamma-three"])
 
     def test_f75_the_hooks_override_path_is_in_the_last_line(self):
         self.put(SID1, self.chain("invoice-mailer", 2) + [entry("user", "x", "cur", ts(30))])

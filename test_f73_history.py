@@ -302,6 +302,102 @@ class Cap(Lab):
         self.assertFalse(any(OMIT_RE.match(l) for l in self.lines(out)))
 
 
+class Shrink(Lab):
+    """F73 cap amendment: over a cap, shrink in this order and stop at the first step that fits: 1 drop the neighbour
+    sentences; 2 a window of 200 characters centred on the match; 3 a window of 120 characters; 4 a window of 80
+    characters (auto-recall amendment 2); 5 the middle cut."""
+
+    def put_n(self, n, make):
+        self.put(SID1, [entry("user", make(i), "u%03d" % i, ts(i % 60, hour=1 + i // 60)) for i in range(n)])
+
+    def test_f73_step_1_drops_the_neighbour_sentences_before_anything_else(self):
+        self.put_n(20, lambda i: "PRESENT%03d %s. The invoice-mailer step %03d is on. POSTSENT%03d %s." %
+                   (i, "p" * 100, i, i, "q" * 100))
+        out = self.history(KEY)
+        self.assertLessEqual(len(out.rstrip("\n")), CAP)
+        self.assertEqual(len(self.entries(out)), 20, out)
+        self.assertFalse(any(OMIT_RE.match(l) for l in self.lines(out)))
+        self.assertNotIn("PRESENT", out)
+        self.assertNotIn("POSTSENT", out)
+        self.assertEqual(self.lines(out)[0], HIST_LINE1 % (KEY, 20))
+
+    def test_f73_the_neighbours_stay_when_everything_fits(self):
+        self.put_n(3, lambda i: "PRESENT%03d here. The invoice-mailer step %03d is on. POSTSENT%03d here." % (i, i, i))
+        out = self.history(KEY)
+        self.assertIn("PRESENT000", out)
+        self.assertIn("POSTSENT002", out)
+
+    def test_f73_step_2_cuts_each_entry_to_a_window_of_200_characters(self):
+        self.put_n(14, lambda i: "The invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 300, i))
+        out = self.history(KEY)
+        ents = self.entries(out)
+        self.assertEqual(len(ents), 14, out)
+        self.assertFalse(any(OMIT_RE.match(l) for l in self.lines(out)))
+        self.assertLessEqual(len(out.rstrip("\n")), CAP)
+        for m in ents:
+            self.assertLessEqual(len(m.group("text")), 210, m.group("text"))
+            self.assertGreater(len(m.group("text")), 130, "a 200-character window, not the 120 one")
+            self.assertIn("invoice-mailer", m.group("text"))
+        self.assertNotIn("ENDMARK", out)
+
+    def test_f73_step_3_cuts_each_entry_to_a_window_of_120_characters(self):
+        self.put_n(22, lambda i: "The invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 300, i))
+        out = self.history(KEY)
+        ents = self.entries(out)
+        self.assertEqual(len(ents), 22, out)
+        self.assertFalse(any(OMIT_RE.match(l) for l in self.lines(out)))
+        self.assertLessEqual(len(out.rstrip("\n")), CAP)
+        for m in ents:
+            self.assertLessEqual(len(m.group("text")), 130, m.group("text"))
+            self.assertIn("invoice-mailer", m.group("text"))
+
+    def test_f73_step_4_cuts_each_entry_to_a_window_of_80_characters(self):
+        self.put_n(30, lambda i: "The invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 300, i))
+        out = self.history(KEY)
+        ents = self.entries(out)
+        self.assertEqual(len(ents), 30, out)
+        self.assertFalse(any(OMIT_RE.match(l) for l in self.lines(out)))
+        self.assertLessEqual(len(out.rstrip("\n")), CAP)
+        for m in ents:
+            self.assertLessEqual(len(m.group("text")), 90, m.group("text"))
+            self.assertIn("invoice-mailer", m.group("text"))
+
+    def test_f73_step_5_the_middle_cut_comes_last(self):
+        self.put_n(90, lambda i: "The invoice-mailer step %03d %s" % (i, "y" * 300))
+        out = self.history(KEY)
+        ls = self.lines(out)
+        self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 1, out)
+        self.assertLessEqual(len(out.rstrip("\n")), CAP)
+        for m in self.entries(out):
+            self.assertLessEqual(len(m.group("text")), 90, "the entries were already cut to 80 characters")
+
+    def test_f73_a_14_mention_chain_with_rejected_newest_mentions_keeps_every_mention(self):
+        def make(i):
+            if i == 7:
+                return "invoice-mailer DECIDEDMARK use value-7 for good. " + "z" * 400
+            if i >= 11:
+                return "invoice-mailer REJECTEDMARK%d proposal value-%d was rejected. %s" % (i, i, "z" * 400)
+            return "invoice-mailer value-%d is the setting now. %s" % (i, "z" * 400)
+        self.put_n(14, make)
+        out = self.history(KEY)
+        self.assertEqual(self.lines(out)[0], HIST_LINE1 % (KEY, 14))
+        self.assertEqual(len(self.entries(out)), 14, out)
+        self.assertFalse(any(OMIT_RE.match(l) for l in self.lines(out)), "no middle cut: shorter entries fit")
+        self.assertIn("DECIDEDMARK", out, "the deciding statement is kept")
+        for i in (11, 12, 13):
+            self.assertIn("REJECTEDMARK%d" % i, out)
+        order = [int(re.search(r"value-(\d+)", l).group(1)) for l in self.lines(out) if ENTRY_RE.match(l)]
+        self.assertEqual(order, list(range(14)), "oldest first")
+        self.assertLessEqual(len(out.rstrip("\n")), CAP)
+
+    def test_f73_all_is_not_shrunk(self):
+        self.put_n(14, lambda i: "invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 400, i))
+        out = self.history(KEY, "--all")
+        self.assertGreater(len(out), CAP)
+        for i in range(14):
+            self.assertIn("ENDMARK%03d" % i, out)
+
+
 # ---------------------------------------------------------------- MCP tool
 class McpBase(Lab):
     def setUp(self):
