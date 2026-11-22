@@ -111,11 +111,15 @@ class Identifiers(Base):
         out = self.ctx("what did we decide about beta-two and alpha-one and beta-two and gamma-three and delta-four")
         self.assertEqual(self.blocks(out), ["beta-two", "alpha-one", "gamma-three"], out)
         self.assertNotIn("delta-four", out)
+        self.assertEqual(FULL_RE.match(out.split("\n")[-1]).group("ident"), "beta-two",
+                         "the last line names the first identifier that has mentions")
+        self.assertEqual(self.rows()[-1]["identifiers"], 4, "the number of identifiers found")
 
     def test_f75_an_identifier_without_mentions_is_left_out(self):
         self.put(SID1, self.chain("real-key", 2) + [entry("user", "x", "cur", ts(30))])
-        out = self.ctx("what did we decide about real-key and ghost-key")
+        out = self.ctx("what did we decide about ghost-key and real-key")
         self.assertEqual(self.blocks(out), ["real-key"])
+        self.assertEqual(FULL_RE.match(out.split("\n")[-1]).group("ident"), "real-key")
         self.assertNotIn("ghost-key", out)
         self.assertNotIn("no mentions", out)
 
@@ -214,6 +218,7 @@ class Health(Base):
         row = self.rows()[-1]
         self.assertTrue({"ts", "session_id", "fired", "cue", "hits", "ms", "timed_out", "mode", "identifiers"} <= set(row), row)
         self.assertEqual((row["mode"], row["identifiers"]), ("history", 2))
+        self.assertEqual(row["hits"], 4, "hits counts the mentions in history mode")
         self.assertIs(type(row["identifiers"]), int)
         text = open(os.path.join(self.hd, "auto-recall.jsonl")).read()
         for w in ("invoice-mailer", "billing-db", "invoice", "billing"):
