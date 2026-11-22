@@ -152,7 +152,7 @@ class AutoRecallHook(HookBase):
         os.makedirs(self.hooks)
         copy_hook_scripts(self.hooks)
         self.trace = os.path.join(self.home, "decoy-trace")
-        self.seed([("user", "We decided to use the postgres database for the billing service BILLINGMARK")])
+        self.seed([("user", "We decided to use the postgres database for the billing service BILLINGMARK"), ("user", "an unrelated closing prompt")])
         self.n = 0
 
     def private(self, drop=()):
@@ -218,7 +218,7 @@ class McpServer(HookBase):
         copy_hook_scripts(self.hooks)
         open(os.path.join(self.hooks, "recall.py"), "w").write(DECOY_RECALL)
         self.trace = os.path.join(self.home, "decoy-trace")
-        self.seed([("user", "We decided to use the postgres database for the billing service BILLINGMARK")])
+        self.seed([("user", "We decided to use the postgres database for the billing service BILLINGMARK"), ("user", "an unrelated closing prompt")])
         self.clients = []
         self.n = 0
 

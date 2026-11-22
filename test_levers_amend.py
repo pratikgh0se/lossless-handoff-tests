@@ -1,4 +1,4 @@
-"""Amendments of 2026-11-22 to the 0.16.0 contract (F68, F69, F70, F71, F72 and the file modes). Code-blind: written from
+"""Amendments of 2026-11-22 to the 0.17.0 contract (F68, F69, F70, F71, F72 and the file modes). Code-blind: written from
 contract-0.16.md only. See the class docstrings for the rule that each class covers."""
 import json, os, re, stat, subprocess, sys, threading, unittest
 
@@ -354,7 +354,7 @@ class McpAmend(HookBase):
         copy_hook_scripts(self.hooks)
         self.clients = []
         self.seed([("user", "We decided to use the postgres database for the billing service BILLINGMARK"),
-                   ("user", "Run the exporter with the -x flag and the zebra option")])
+                   ("user", "Run the exporter with the -x flag and the zebra option"), ("user", "an unrelated closing prompt")])
 
     def tearDown(self):
         for c in self.clients:

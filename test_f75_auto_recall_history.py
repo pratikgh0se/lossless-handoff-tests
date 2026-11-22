@@ -1,0 +1,458 @@
+"""F75 Auto-recall identifier history mode (amends F67.c; the F67.b trigger does not change). Code-blind: written from
+contract-0.17.md only. An identifier is a token in backticks, or a token of 3+ characters with `-`, `_`, `.` or `/` inside
+(a URL is not one). With 1+ identifiers the hook injects the F73 history of the first 3 (2,000 characters each, 4,000 in
+total); with none it runs the F67.c word search without the stop-list words. The health row adds `mode` and
+`identifiers` (a count, never the text)."""
+import json, os, re, shutil, subprocess, sys, time, unittest
+
+from history_common import (Lab, ENTRY_RE, OMIT_RE, HIST_LINE1, NO_MENTIONS, SID1, SID2, ts, entry, bash_call, tool_result,
+                            injection)
+from test_f67_auto_recall import HEADER as WORD_HEADER, HIT_RE as WORD_HIT_RE
+
+HIST_HEADER = ("Lossless Handoff auto-recall: the history of the identifiers in your prompt, oldest first. A later mention "
+               "can be rejected, a dry run or undone. This can be partial; search for the rest.")
+FULL_RE = re.compile(r"^Full history: python3 (?P<hooks>\S+)/recall\.py history (?P<ident>\S+) --all$")
+BLOCK_RE = re.compile(r"^history of (?P<ident>\S+?):")
+STOP = ["previous", "replaced", "rejected", "proposal", "remember", "current", "earlier", "value", "values", "answer",
+        "answers", "setting", "settings", "before", "which", "there", "their", "about", "would", "could", "should"]
+
+
+class Base(Lab):
+    def run_hook(self, prompt, raw=None, extra=None, transcript=True):
+        path = os.path.join(self.tdir, SID1 + ".jsonl")
+        payload = {"session_id": SID1, "transcript_path": path if transcript else os.path.join(self.tmp, "none.jsonl"),
+                   "cwd": self.proj, "prompt": prompt, "hook_event_name": "UserPromptSubmit"}
+        t0 = time.time()
+        r = subprocess.run([sys.executable, os.path.join(self.hooks, "auto-recall.py")],
+                           input=json.dumps(payload) if raw is None else raw, capture_output=True, text=True,
+                           env=self.env(extra), cwd=self.tmp, timeout=30)
+        self.elapsed = time.time() - t0
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    @staticmethod
+    def context(stdout):
+        s = stdout.strip("\n")
+        if s.startswith("{"):
+            try:
+                return json.loads(s)["hookSpecificOutput"]["additionalContext"].strip("\n")
+            except (ValueError, KeyError, TypeError):
+                pass
+        return s
+
+    def ctx(self, prompt, **kw):
+        return self.context(self.run_hook(prompt, **kw))
+
+    def rows(self):
+        p = os.path.join(self.hd, "auto-recall.jsonl")
+        return [json.loads(l) for l in open(p) if l.strip()] if os.path.exists(p) else []
+
+    def chain(self, key, n=3, tag=None, start=0):
+        return [entry("user" if i % 2 == 0 else "assistant", "%s step %s%d is the value" % (key, tag or "", i),
+                      "%s-%d" % (key, i), ts(start + i)) for i in range(n)]
+
+    def blocks(self, out):
+        return [m.group("ident") for m in (BLOCK_RE.match(l) for l in out.split("\n")) if m]
+
+
+class Identifiers(Base):
+    def test_f75_regex_identifier_gives_the_history_mode_output(self):
+        self.put(SID1, self.chain("invoice-mailer", 3) + [entry("user", "what did we decide about invoice-mailer", "cur", ts(20))])
+        out = self.ctx("what did we decide about invoice-mailer")
+        ls = out.split("\n")
+        self.assertEqual(ls[0], HIST_HEADER)
+        self.assertEqual(ls[1], HIST_LINE1 % ("invoice-mailer", 3))
+        self.assertEqual(len([l for l in ls if ENTRY_RE.match(l)]), 3)
+        m = FULL_RE.match(ls[-1])
+        self.assertTrue(m, ls[-1])
+        self.assertEqual(m.group("ident"), "invoice-mailer")
+        self.assertEqual(m.group("hooks"), "~/.claude/hooks")
+
+    def test_f75_entries_are_oldest_first(self):
+        self.put(SID1, self.chain("invoice-mailer", 4) + [entry("user", "what did we decide about invoice-mailer", "cur", ts(20))])
+        out = self.ctx("what did we decide about invoice-mailer")
+        steps = [int(re.search(r"step (\d)", l).group(1)) for l in out.split("\n") if ENTRY_RE.match(l)]
+        self.assertEqual(steps, [0, 1, 2, 3])
+
+    def test_f75_the_current_prompt_is_not_in_the_history(self):
+        self.put(SID1, self.chain("invoice-mailer", 2) + [entry("user", "what did we decide about invoice-mailer CURRENTMARK", "cur", ts(20))])
+        out = self.ctx("what did we decide about invoice-mailer CURRENTMARK")
+        self.assertNotIn("CURRENTMARK", out)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 2))
+
+    def test_f75_backtick_token_is_an_identifier_even_without_a_separator(self):
+        self.put(SID1, [entry("user", "Zeta is set to one", "u1", ts(1)), entry("user", "Zeta moved to two", "u2", ts(2)),
+                        entry("user", "what did we decide about `Zeta`", "cur", ts(9))])
+        out = self.ctx("what did we decide about `Zeta`")
+        self.assertEqual(out.split("\n")[0], HIST_HEADER)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("Zeta", 2))
+
+    def test_f75_each_separator_makes_an_identifier(self):
+        for ident in ("alpha_beta", "alpha.beta", "alpha/beta", "alpha-beta"):
+            with self.subTest(ident):
+                self.put(SID1, [entry("user", "%s is set to one" % ident, "u1", ts(1)),
+                                entry("user", "what did we decide about %s" % ident, "cur", ts(9))])
+                out = self.ctx("what did we decide about %s" % ident)
+                self.assertEqual(out.split("\n")[0], HIST_HEADER, out)
+                self.assertIn(HIST_LINE1 % (ident, 1), out)
+
+    def test_f75_a_url_is_not_an_identifier(self):
+        self.put(SID1, [entry("user", "see https://example.com/some-page for the billing database notes", "u1", ts(1)),
+                        entry("user", "what did we decide about https://example.com/some-page billing database", "cur", ts(9))])
+        out = self.ctx("what did we decide about https://example.com/some-page billing database")
+        self.assertNotEqual(out.split("\n")[0], HIST_HEADER)
+        self.assertNotIn("history of", out)
+
+    def test_f75_first_three_identifiers_in_prompt_order_without_duplicates(self):
+        recs = []
+        for i, k in enumerate(("beta-two", "alpha-one", "gamma-three", "delta-four")):
+            recs += self.chain(k, 2, start=i * 3)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(30))])
+        out = self.ctx("what did we decide about beta-two and alpha-one and beta-two and gamma-three and delta-four")
+        self.assertEqual(self.blocks(out), ["beta-two", "alpha-one", "gamma-three"], out)
+        self.assertNotIn("delta-four", out)
+        self.assertEqual(FULL_RE.match(out.split("\n")[-1]).group("ident"), "beta-two",
+                         "the last line names the first identifier that has mentions")
+        self.assertEqual(self.rows()[-1]["identifiers"], 4, "the number of identifiers found")
+
+    def test_f75_an_identifier_without_mentions_is_left_out(self):
+        self.put(SID1, self.chain("real-key", 2) + [entry("user", "x", "cur", ts(30))])
+        out = self.ctx("what did we decide about ghost-key and real-key")
+        self.assertEqual(self.blocks(out), ["real-key"])
+        self.assertEqual(FULL_RE.match(out.split("\n")[-1]).group("ident"), "real-key")
+        self.assertNotIn("ghost-key", out)
+        self.assertNotIn("no mentions", out)
+
+    def test_f75_sibling_keys_do_not_leak_into_the_block(self):
+        self.put(SID1, self.chain("invoice-mailer", 2) + [entry("user", "invoice-mailer-eu SIBLINGLEAK", "s1", ts(10)),
+                                                        entry("user", "x", "cur", ts(30))])
+        out = self.ctx("what did we decide about invoice-mailer")
+        self.assertNotIn("SIBLINGLEAK", out)
+
+    def test_f75_no_mentions_at_all_falls_back_to_the_word_search(self):
+        self.put(SID1, [entry("user", "We decided to use the postgres database for the billing service", "u1", ts(1)),
+                        entry("user", "what did i say about ghost-key postgres database billing", "cur", ts(9))])
+        out = self.ctx("what did i say about ghost-key postgres database billing")
+        self.assertTrue(out.startswith(WORD_HEADER), out[:200])
+        self.assertTrue(any(WORD_HIT_RE.match(l) for l in out.split("\n")))
+        self.assertEqual(self.rows()[-1]["mode"], "search")
+
+    def test_f75_history_uses_the_f73_exclusions_and_fork_dedupe(self):
+        base = self.chain("invoice-mailer", 2)
+        self.put(SID1, base + [bash_call("python3 ~/.claude/hooks/recall.py history invoice-mailer", "b1", ts(5), tid="t1"),
+                               tool_result("invoice-mailer RESULTLEAK", "r1", ts(6), tid="t1"),
+                               injection("Lossless Handoff auto-recall: invoice-mailer INJLEAK", "i1", ts(7)),
+                               entry("user", "x", "cur", ts(30))])
+        self.put(SID2, [dict(r, sessionId=SID2) for r in base])
+        out = self.ctx("what did we decide about invoice-mailer")
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 2))
+        for leak in ("RESULTLEAK", "INJLEAK"):
+            self.assertNotIn(leak, out)
+
+
+class Amendment(Base):
+    """F75 amendment (2026-11-22): regex-form tokens first, then the backticked tokens that do not match the regex form.
+    A backticked stop-list word, or a common lowercase word of 8 or fewer letters with no digit, is not an identifier.
+    "The first 3" counts only identifiers that have a mention."""
+
+    def put_keys(self, keys, extra=()):
+        recs = []
+        for i, k in enumerate(keys):
+            recs += self.chain(k, 2, start=i * 3)
+        for w in extra:
+            recs.append(entry("user", "the %s is mentioned here" % w, "w-%s" % w, ts(40)))
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(55))])
+
+    def test_f75_amend_regex_tokens_come_before_backticked_tokens(self):
+        self.put_keys(["Zeta", "invoice-mailer"])
+        out = self.ctx("what did we decide about `Zeta` and invoice-mailer")
+        self.assertEqual(self.blocks(out), ["invoice-mailer", "Zeta"], out)
+        self.assertEqual(FULL_RE.match(out.split("\n")[-1]).group("ident"), "invoice-mailer")
+
+    def test_f75_amend_backticked_tokens_keep_prompt_order_among_themselves(self):
+        self.put_keys(["Beta", "Alpha"])
+        out = self.ctx("what did we decide about `Beta` and `Alpha`")
+        self.assertEqual(self.blocks(out), ["Beta", "Alpha"], out)
+
+    def test_f75_amend_a_backticked_regex_form_token_counts_as_a_regex_token(self):
+        self.put_keys(["Zeta", "billing-db"])
+        out = self.ctx("what did we decide about `Zeta` and `billing-db`")
+        self.assertEqual(self.blocks(out), ["billing-db", "Zeta"], out)
+
+    def test_f75_amend_backticked_common_words_are_not_identifiers(self):
+        words = ["current", "previous", "replaced", "null"]
+        self.put_keys(["real-key"], extra=words)
+        out = self.ctx("what did we decide about `current` `previous` `replaced` `null` and real-key")
+        self.assertEqual(self.blocks(out), ["real-key"], out)
+        row = self.rows()[-1]
+        self.assertEqual((row["mode"], row["identifiers"]), ("history", 1), row)
+
+    def test_f75_amend_each_listed_common_word_alone_is_not_an_identifier(self):
+        for w in ("current", "previous", "replaced", "null"):
+            with self.subTest(w):
+                self.put(SID1, [entry("user", "the %s value is mentioned here with billing database words" % w, "u1", ts(1)),
+                                entry("user", "x", "cur", ts(55))])
+                out = self.ctx("what did we decide about `%s`" % w)
+                self.assertNotEqual(out.split("\n")[0], HIST_HEADER, out)
+                self.assertNotIn("history of", out)
+                self.assertEqual(self.rows()[-1]["identifiers"], 0)
+
+    def test_f75_amend_other_backticked_tokens_stay_identifiers(self):
+        for ident in ("Zeta", "abc123", "verylongsettingname", "MAX"):
+            with self.subTest(ident):
+                self.put(SID1, [entry("user", "%s is set to one" % ident, "u1", ts(1)), entry("user", "x", "cur", ts(55))])
+                out = self.ctx("what did we decide about `%s`" % ident)
+                self.assertEqual(out.split("\n")[0], HIST_HEADER, out)
+                self.assertEqual(self.blocks(out), [ident])
+
+    def test_f75_amend_identifiers_without_a_mention_do_not_use_a_slot(self):
+        self.put_keys(["real-one", "real-two", "real-three", "real-four"])
+        out = self.ctx("what did we decide about ghost-a ghost-b ghost-c real-one real-two real-three real-four")
+        self.assertEqual(self.blocks(out), ["real-one", "real-two", "real-three"], out)
+        self.assertNotIn("ghost", out)
+        self.assertNotIn("real-four", out)
+
+    def test_f75_amend_lure_words_do_not_take_the_slots_before_real_keys(self):
+        self.put_keys(["real-one", "real-two", "real-three"], extra=["current", "previous", "replaced"])
+        out = self.ctx("what did we decide about `current` `previous` `replaced` real-one real-two real-three")
+        self.assertEqual(self.blocks(out), ["real-one", "real-two", "real-three"], out)
+
+
+class PromptRecord(Base):
+    """F73 amendment: auto-recall hides only the record of the current prompt, matched by equal text or, for a prompt of
+    20 or more characters, by its first 80 characters found in the record. The session is the hook's transcript_path."""
+
+    def put_with(self, prompt_record_text, after=True):
+        recs = self.chain("invoice-mailer", 2) + [entry("user", prompt_record_text, "cur", ts(20))]
+        if after:
+            recs.append(entry("assistant", "AFTERMARK the invoice-mailer was changed", "aft", ts(21)))
+        self.put(SID1, recs)
+
+    PROMPT = "what did we decide about invoice-mailer PROMPTMARK"
+
+    def test_f75_amend_the_record_after_the_prompt_is_kept(self):
+        self.put_with(self.PROMPT)
+        out = self.ctx(self.PROMPT)
+        self.assertNotIn("PROMPTMARK", out)
+        self.assertIn("AFTERMARK", out)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 3))
+
+    def test_f75_amend_a_record_that_holds_the_first_80_characters_is_the_prompt(self):
+        self.put_with("<ide_opened_file>a.py</ide_opened_file> " + self.PROMPT + " and some trailing context words")
+        out = self.ctx(self.PROMPT)
+        self.assertNotIn("PROMPTMARK", out)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 3))
+
+    def test_f75_amend_only_the_first_80_characters_are_compared(self):
+        long_prompt = "what did we decide about invoice-mailer " + "w" * 60 + " ENDMARK"
+        self.put_with(long_prompt[:80] + " but the record ends differently TAILMARK")
+        out = self.ctx(long_prompt)
+        self.assertNotIn("TAILMARK", out)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 3))
+
+    def test_f75_amend_a_short_prompt_matches_by_equal_text_only(self):
+        short = "previously a-b-c"
+        self.assertLess(len(short), 20)
+        # the prompt record is the last user record when the hook runs; an earlier decorated record is an ordinary message
+        recs = self.chain("a-b-c", 2) + [entry("user", "see: previously a-b-c ok DECORATED", "dec", ts(15)),
+                                         entry("user", short, "cur", ts(20))]
+        self.put(SID1, recs)
+        out = self.ctx(short)
+        self.assertIn("DECORATED", out, "a short prompt is matched by equal text only")
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("a-b-c", 3))
+
+    def test_f75_amend_a_prompt_with_no_matching_record_hides_nothing(self):
+        self.put_with("a totally different last record about invoice-mailer LASTREC")
+        out = self.ctx("what did we decide about invoice-mailer PROMPTMARK")
+        self.assertIn("LASTREC", out)
+
+
+class Groups(Base):
+    """Auto-recall amendment 2: the identifier order is (1) backticked regex-form tokens, (2) other regex-form tokens that
+    hold a digit, `_`, `.` or `/`, (3) plain lowercase hyphen compounds, (4) other backticked tokens. Inside a group:
+    prompt order. Only the first 3 that have a mention are shown."""
+
+    def put_keys(self, keys):
+        recs = []
+        for i, k in enumerate(keys):
+            recs += self.chain(k, 2, start=i * 3)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(55))])
+
+    def test_f75_amend2_group_1_backticked_regex_form_comes_first(self):
+        self.put_keys(["dry-run", "max_val", "invoice-mailer"])
+        out = self.ctx("what did we decide about dry-run and max_val and `invoice-mailer`")
+        self.assertEqual(self.blocks(out), ["invoice-mailer", "max_val", "dry-run"], out)
+
+    def test_f75_amend2_group_2_digit_underscore_dot_slash_before_plain_hyphen_compounds(self):
+        for first in ("v2.5", "beta_two", "conf/app", "build-7"):
+            with self.subTest(first):
+                self.put_keys(["dry-run", "follow-up", first])
+                out = self.ctx("what did we decide about dry-run and follow-up and %s" % first)
+                self.assertEqual(self.blocks(out), [first, "dry-run", "follow-up"], out)
+
+    def test_f75_amend2_inside_a_group_prompt_order_holds(self):
+        self.put_keys(["max_val", "v2.5", "conf/app"])
+        out = self.ctx("what did we decide about v2.5 and conf/app and max_val")
+        self.assertEqual(self.blocks(out), ["v2.5", "conf/app", "max_val"], out)
+
+    def test_f75_amend2_group_3_plain_hyphen_compounds_before_other_backticked_tokens(self):
+        self.put_keys(["Zeta", "dry-run", "follow-up"])
+        out = self.ctx("what did we decide about `Zeta` and dry-run and follow-up")
+        self.assertEqual(self.blocks(out), ["dry-run", "follow-up", "Zeta"], out)
+
+    def test_f75_amend2_the_four_groups_in_order_with_a_limit_of_3(self):
+        self.put_keys(["Zeta", "dry-run", "max_val", "invoice-mailer"])
+        out = self.ctx("what did we decide about `Zeta` and dry-run and max_val and `invoice-mailer`")
+        self.assertEqual(self.blocks(out), ["invoice-mailer", "max_val", "dry-run"], out)
+        self.assertNotIn("Zeta", out)
+
+
+class Caps(Base):
+    def long(self, key, n=40, start=0):
+        return [entry("user", "%s step %03d %s" % (key, i, "x" * 150), "%s-%d" % (key, i), ts((start + i) % 60, hour=1 + (start + i) // 60))
+                for i in range(n)]
+
+    def test_f75_one_identifier_block_is_at_most_2000_characters_with_the_middle_cut(self):
+        self.put(SID1, self.long("invoice-mailer") + [entry("user", "x", "cur", ts(0, day=3))])
+        out = self.ctx("what did we decide about invoice-mailer")
+        ls = out.split("\n")
+        start = ls.index(HIST_LINE1 % ("invoice-mailer", 40))
+        end = max(i for i, l in enumerate(ls) if OMIT_RE.match(l) or ENTRY_RE.match(l))
+        block = "\n".join(ls[start:end + 1])
+        self.assertLessEqual(len(block), 2000, len(block))
+        self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 1, out)
+        self.assertIn("step 000", ls[start + 1])
+        self.assertIn("step 001", ls[start + 2])
+        self.assertIn("step 039", ls[end], "the newest entry is kept")
+        self.assertTrue(FULL_RE.match(ls[-1]))
+
+    def test_f75_shrink_steps_keep_every_mention_inside_2000_characters(self):
+        self.put(SID1, [entry("user", "The invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 300, i), "u%d" % i, ts(i))
+                        for i in range(8)] + [entry("user", "x", "cur", ts(0, day=3))])
+        out = self.ctx("what did we decide about invoice-mailer")
+        ls = out.split("\n")
+        start = ls.index(HIST_LINE1 % ("invoice-mailer", 8))
+        ents = [l for l in ls if ENTRY_RE.match(l)]
+        self.assertEqual(len(ents), 8, out)
+        self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 0, "a window fits: no middle cut")
+        self.assertLessEqual(len("\n".join(ls[start:start + 1 + 8])), 2000)
+        self.assertNotIn("ENDMARK", out)
+
+    def test_f75_three_identifiers_stay_within_4000_characters_in_total(self):
+        recs = []
+        for i, k in enumerate(("alpha-one", "beta-two", "gamma-three")):
+            recs += self.long(k, 40, start=i * 40)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(0, day=3))])
+        out = self.ctx("what did we decide about alpha-one beta-two gamma-three")
+        self.assertLessEqual(len(out), 4000, len(out))
+        got = self.blocks(out)
+        self.assertEqual(got, ["alpha-one", "beta-two", "gamma-three"][:len(got)], "blocks keep prompt order")
+        self.assertGreaterEqual(len(got), 1)
+        self.assertEqual(out.split("\n")[0], HIST_HEADER)
+        self.assertTrue(FULL_RE.match(out.split("\n")[-1]))
+
+    def test_f75_a_third_identifier_is_shown_only_if_it_fits_whole(self):
+        recs = []
+        for i, k in enumerate(("alpha-one", "beta-two")):
+            recs += self.long(k, 40, start=i * 40)
+        recs += self.chain("gamma-three", 3, start=50)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(0, day=3))])
+        out = self.ctx("what did we decide about alpha-one beta-two gamma-three")
+        self.assertLessEqual(len(out), 4000, len(out))
+        ls = out.split("\n")
+        if "gamma-three" in self.blocks(out):
+            i = [j for j, l in enumerate(ls) if l.startswith("history of gamma-three:")][0]
+            tail = [l for l in ls[i:] if ENTRY_RE.match(l) or OMIT_RE.match(l)]
+            self.assertEqual(len([l for l in tail if ENTRY_RE.match(l)]), 3, "whole: all 3 entries")
+            self.assertFalse(any(OMIT_RE.match(l) for l in tail), "whole: no middle cut")
+
+    def test_f75_three_small_blocks_are_all_shown(self):
+        recs = []
+        for i, k in enumerate(("alpha-one", "beta-two", "gamma-three")):
+            recs += self.chain(k, 3, start=i * 4)
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(30))])
+        out = self.ctx("what did we decide about alpha-one beta-two gamma-three")
+        self.assertEqual(self.blocks(out), ["alpha-one", "beta-two", "gamma-three"])
+
+    def test_f75_the_hooks_override_path_is_in_the_last_line(self):
+        self.put(SID1, self.chain("invoice-mailer", 2) + [entry("user", "x", "cur", ts(30))])
+        out = self.ctx("what did we decide about invoice-mailer", extra={"HANDOFF_HOOKS_HOME": self.hooks})
+        m = FULL_RE.match(out.split("\n")[-1])
+        self.assertTrue(m, out)
+        self.assertEqual(m.group("hooks"), self.hooks)
+
+
+class StopList(Base):
+    def setUp(self):
+        super().setUp()
+        self.put(SID1, [entry("user", "postgres %s" % " ".join(STOP), "u1", ts(1)),
+                        entry("user", "postgres billing database notes", "u2", ts(2)),
+                        entry("user", "x", "cur", ts(30))])
+
+    def test_f75_stop_list_words_are_left_out_of_the_query(self):
+        for w in STOP:
+            with self.subTest(w):
+                out = self.run_hook("what did i say about postgres %s" % w)
+                self.assertEqual(out.strip(), "", "only one query word is left, so there must be no output")
+
+    def test_f75_control_two_real_words_still_fire(self):
+        out = self.ctx("what did i say about postgres billing")
+        self.assertTrue(out.startswith(WORD_HEADER), out[:200])
+
+    def test_f75_only_stop_words_gives_no_output(self):
+        self.assertEqual(self.run_hook("what did i say about the previous replaced rejected proposal").strip(), "")
+
+
+class Health(Base):
+    def test_f75_history_row_has_mode_and_the_identifier_count_and_no_text(self):
+        self.put(SID1, self.chain("invoice-mailer", 2) + self.chain("billing-db", 2, start=5) + [entry("user", "x", "cur", ts(30))])
+        self.ctx("what did we decide about invoice-mailer and billing-db")
+        row = self.rows()[-1]
+        self.assertTrue({"ts", "session_id", "fired", "cue", "hits", "ms", "timed_out", "mode", "identifiers"} <= set(row), row)
+        self.assertEqual((row["mode"], row["identifiers"]), ("history", 2))
+        self.assertEqual(row["hits"], 4, "hits counts the mentions in history mode")
+        self.assertIs(type(row["identifiers"]), int)
+        text = open(os.path.join(self.hd, "auto-recall.jsonl")).read()
+        for w in ("invoice-mailer", "billing-db", "invoice", "billing"):
+            self.assertNotIn(w, text)
+
+    def test_f75_search_row_has_mode_search_and_zero_identifiers(self):
+        self.put(SID1, [entry("user", "We decided to use the postgres database for the billing service", "u1", ts(1))])
+        self.ctx("what did i say about the postgres database billing")
+        row = self.rows()[-1]
+        self.assertEqual((row["mode"], row["identifiers"]), ("search", 0))
+
+    def test_f75_one_identifier_counts_one(self):
+        self.put(SID1, self.chain("invoice-mailer", 2) + [entry("user", "x", "cur", ts(30))])
+        self.ctx("what did we decide about invoice-mailer")
+        self.assertEqual(self.rows()[-1]["identifiers"], 1)
+
+
+class Errors(Base):
+    def test_f75_no_transcripts_at_all_gives_no_output_and_exit_0(self):
+        out = self.run_hook("what did we decide about invoice-mailer", transcript=False)
+        self.assertEqual(out.strip(), "")
+
+    def test_f75_a_missing_transcript_path_and_no_project_transcripts_gives_no_output(self):
+        shutil.rmtree(self.tdir)
+        self.assertEqual(self.run_hook("what did we decide about invoice-mailer").strip(), "")
+
+    def test_f75_bad_input_gives_no_output_and_exit_0(self):
+        for raw in ("{not json", "", "[]", "{}", json.dumps({"prompt": 5})):
+            with self.subTest(raw[:12]):
+                self.assertEqual(self.run_hook("x", raw=raw).strip(), "")
+
+    def test_f75_the_trigger_is_unchanged_an_identifier_alone_does_not_fire(self):
+        self.put(SID1, self.chain("invoice-mailer", 2) + [entry("user", "x", "cur", ts(30))])
+        self.assertEqual(self.run_hook("please deploy invoice-mailer now").strip(), "")
+        self.assertEqual(self.run_hook("/recall what did we decide about invoice-mailer").strip(), "")
+
+    def test_f75_runs_inside_the_time_budget(self):
+        self.put(SID1, self.chain("invoice-mailer", 30) + [entry("user", "x", "cur", ts(59))])
+        self.run_hook("what did we decide about invoice-mailer")
+        self.assertLess(self.elapsed, 5.0)
+        self.assertIs(self.rows()[-1]["timed_out"], False)
+
+
+if __name__ == "__main__":
+    unittest.main()

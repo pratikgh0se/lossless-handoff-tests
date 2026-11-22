@@ -21,6 +21,11 @@ def hits_of(text):
 class Server(HookBase):
     """HookBase gives the project, the transcript folder and `seed()` (see test_f67_auto_recall)."""
 
+    def seed(self, messages, current=None):
+        # 0.17.0 (F73/F74): the MCP tools leave out the current prompt (the last user prompt and what follows), so every
+        # fixture ends with a closing user prompt that has no query words.
+        super().seed(list(messages) + [("user", "an unrelated closing prompt")], current)
+
     def setUp(self):
         super().setUp()
         self.hooks = os.path.join(self.home, ".claude", "hooks")
@@ -63,7 +68,7 @@ class Handshake(Server):
         self.assertEqual(r["id"], 1)
         res = r["result"]
         self.assertEqual(res["serverInfo"]["name"], "lossless-recall")
-        self.assertEqual(res["serverInfo"]["version"], "1.18.0")
+        self.assertEqual(res["serverInfo"]["version"], "1.19.0")
         self.assertIn("tools", res["capabilities"])
         self.assertIsInstance(res["protocolVersion"], str)
 
@@ -85,7 +90,7 @@ class Handshake(Server):
         c = self.start()
         tools = c.call("tools/list")["result"]["tools"]
         by = {t["name"]: t for t in tools}
-        self.assertEqual(sorted(by), ["open_message", "search_earlier_chat"])
+        self.assertEqual(sorted(by), ["key_history", "open_message", "search_earlier_chat"])
         for t in tools:
             self.assertEqual(t["_meta"], {"anthropic/alwaysLoad": True}, t["name"])
             self.assertEqual(t["inputSchema"]["type"], "object")
