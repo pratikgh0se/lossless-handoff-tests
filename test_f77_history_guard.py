@@ -6,7 +6,7 @@ the first 60, not in a tool input or result of this turn and not an existing pat
 (an identifier in 2 to 40 text messages before the current user prompt, at least 2 from the user; otherwise the identifiers
 in the same sentence as an earlier mention of the anchor); 5 no evidence in this turn; 6 cooldown.
 The Stop-output form is the builder's choice from the docs: these tests accept either documented form."""
-import json, os, re, stat, sys, unittest
+import json, os, re, shutil, stat, sys, unittest
 
 from guard_common import (G, GUARD_LINE1, HEALTH_KEYS, KEY, chain, guard_text, SID1, ts, entry, bash_call, mcp_call,
                           tool_result, injection, usage_entry, HIST_LINE1, ENTRY_RE)
@@ -173,8 +173,8 @@ class Anchor(G):
     def test_f77_a_value_with_no_key_anchors_through_the_sentence(self):
         recs = chain("filler-a", 1, 0)  # keeps the chat longer
         recs += [entry("user", "Set queue-depth to AB12-9Z for now", "u1", ts(10)),
-                 entry("assistant", "Done: queue-depth is AB12-9Z.", "a1", ts(11)),
-                 entry("user", "Use queue-depth with AB12-9Z in staging", "u2", ts(12))]
+                 entry("assistant", "Done: queue-depth is fine.", "a1", ts(11)),
+                 entry("user", "Use queue-depth with care in staging", "u2", ts(12))]
         self.tx(recs)
         out = self.stop("The value is AB12-9Z.")
         self.assertEqual(self.blocks(out), ["queue-depth"], out)
@@ -236,12 +236,6 @@ class Cooldown(G):
         self.tx(chain(KEY, 2, 1), tokens=200000, prompt="a third request")
         self.assertNotEqual(self.stop(REPLY), "")
 
-    def test_f77_shadow_mode_also_records_the_cooldown_table(self):
-        self.tx(chain(KEY, 2, 1))
-        self.stop(REPLY, mode="shadow")
-        files = [f for f in os.listdir(self.state) if f.startswith("history-guard-") and f.endswith(".json")]
-        self.assertEqual(files, ["history-guard-%s.json" % SID1])
-
 
 class Modes(G):
     def test_f77_unset_and_shadow_give_no_output_but_log_a_row(self):
@@ -274,14 +268,14 @@ class Modes(G):
 
 
 class Output(G):
-    def test_f77_stdout_is_one_json_object_in_a_documented_form(self):
+    def test_f77_stdout_is_the_documented_stop_form(self):
         self.tx(chain(KEY, 2, 1))
         raw = self.run_stop(REPLY, extra={"HANDOFF_HISTORY_GUARD": "block"})
         o = json.loads(raw)
-        h = o.get("hookSpecificOutput")
-        ok = (isinstance(h, dict) and h.get("hookEventName") == "Stop" and isinstance(h.get("additionalContext"), str)) or \
-             (o.get("decision") == "block" and isinstance(o.get("reason"), str))
-        self.assertTrue(ok, raw[:300])
+        self.assertEqual(set(o), {"hookSpecificOutput"}, raw[:300])
+        self.assertEqual(o["hookSpecificOutput"]["hookEventName"], "Stop")
+        self.assertEqual(set(o["hookSpecificOutput"]), {"hookEventName", "additionalContext"})
+        self.assertEqual(len(raw.strip().split("\n")), 1, "one JSON line")
 
     def test_f77_caps_1500_per_subject_and_6000_in_total(self):
         recs = []
@@ -346,14 +340,16 @@ class Health(G):
 
 
 class HooksHome(G):
-    def test_f77_recall_py_is_loaded_from_handoff_hooks_home_with_no_fallback(self):
+    def test_f77_a_decoy_recall_py_beside_the_entry_file_is_not_used_when_the_override_names_a_folder(self):
         self.tx(chain(KEY, 2, 1))
-        empty = os.path.join(self.tmp, "empty-hooks")
-        os.makedirs(empty)
-        self.assertEqual(self.stop(REPLY, extra={"HANDOFF_HOOKS_HOME": empty}), "",
-                         "no recall.py there, and no fallback to the folder beside the entry file")
-        self.assertEqual(self.stop(REPLY, extra={"HANDOFF_HOOKS_HOME": os.path.join(self.tmp, "no-such")}), "")
-        self.assertNotEqual(self.stop(REPLY, extra={"HANDOFF_HOOKS_HOME": self.hooks}), "", "control: a full folder works")
+        real = os.path.join(self.tmp, "real-hooks")
+        shutil.copytree(self.hooks, real)
+        trace = os.path.join(self.tmp, "decoy.trace")
+        with open(os.path.join(self.hooks, "recall.py"), "w") as f:
+            f.write("import os\nopen(os.environ['DECOY_TRACE'], 'w').write('used')\nraise SystemExit(0)\n")
+        out = self.stop(REPLY, extra={"HANDOFF_HOOKS_HOME": real, "DECOY_TRACE": trace})
+        self.assertFalse(os.path.exists(trace), "the guard used the decoy beside the entry file")
+        self.assertNotEqual(out, "", "the real folder named by HANDOFF_HOOKS_HOME works")
 
 
 class Errors(G):

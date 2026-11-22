@@ -1,8 +1,7 @@
 """Install, uninstall, dry-run, saved defaults and the kept line for the history guard (F77, `--history-guard`, key
 `history_guard`, a Stop hook with timeout 5) and the action guard (F80, `--action-guard`, key `action_guard`). Code-blind:
 written from contract-0.18.md: the F64 opt-in rules apply. The two guards are separate files and can be installed with or
-without claim-guard. The F80 event is the builder's choice (PostToolBatch, or PostToolUse with the matcher
-`Edit|Write|MultiEdit|NotebookEdit|Bash`)."""
+without claim-guard. The product spec pins the F80 event: PostToolBatch, no matcher, timeout 5."""
 import json, os, re, unittest
 
 from helpers import installed_home, run_install, run_uninstall
@@ -48,12 +47,16 @@ class ActionGuard(LeverInstall, InstBase):
         es = entries(read_settings(self.home), self.file)
         self.assertEqual(len(es), 1, es)
         ev, g, h = es[0]
-        self.assertIn(ev, ("PostToolBatch", "PostToolUse"))
+        self.assertEqual(ev, "PostToolBatch")
+        self.assertNotIn("matcher", g, "the event has no matcher")
         self.assertEqual(h.get("type"), "command")
         self.assertEqual(h.get("timeout"), 5)
         self.assertRegex(h["command"], r"^python3 \S+/\.claude/hooks/action-guard\.py$")
-        if ev == "PostToolUse":
-            self.assertEqual(g.get("matcher"), "Edit|Write|MultiEdit|NotebookEdit|Bash")
+
+    def test_each_guard_installs_guard_common_py(self):
+        for flag in ("--action-guard", "--history-guard"):
+            self.run_i(flag)
+            self.assertTrue(os.path.exists(self.p(H + "guard_common.py")), flag)
 
     def test_rerun_keeps_the_part_and_prints_the_kept_line_once(self):
         self.run_i(self.flag)

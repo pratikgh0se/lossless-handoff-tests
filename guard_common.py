@@ -16,27 +16,21 @@ ACTION_LINE1 = ("Lossless Handoff history check: your last tool call used names 
 BLOCK_RE = re.compile(r"^history of (?P<ident>\S+?):")
 HEALTH_KEYS = {"ts", "session_id", "mode", "fired", "subjects", "anchors", "tokens", "chars", "ms"}
 KEY = "queue-depth"
-ACTION_EVENT = os.environ.get("ACTION_GUARD_EVENT", "PostToolUse")
+ACTION_EVENT = "PostToolBatch"
 
 
-def guard_text(stdout):
-    """The text that a guard hands to Claude. Accepts the documented forms: hookSpecificOutput.additionalContext, or
-    {"decision": "block", "reason": text}. Returns "" for no output."""
+def guard_text(stdout, event="Stop"):
+    """The text that a guard hands to Claude. Pinned form (product spec F77/F80): one JSON object
+    {"hookSpecificOutput": {"hookEventName": <event>, "additionalContext": text}}. Returns "" for no output.
+    A different form raises an assertion error."""
     s = stdout.strip()
     if not s:
         return ""
-    try:
-        o = json.loads(s)
-    except ValueError:
-        return s
-    if not isinstance(o, dict):
-        return s
-    h = o.get("hookSpecificOutput")
-    if isinstance(h, dict) and h.get("additionalContext"):
-        return h["additionalContext"].strip("\n")
-    if o.get("decision") == "block" and o.get("reason"):
-        return o["reason"].strip("\n")
-    return ""
+    o = json.loads(s)
+    h = o["hookSpecificOutput"]
+    assert h["hookEventName"] == event, s[:200]
+    assert set(o) == {"hookSpecificOutput"}, s[:200]
+    return h["additionalContext"].strip("\n")
 
 
 def chain(key=KEY, users=2, assistants=1, start=0, tag="", day=1):
@@ -71,7 +65,7 @@ class G(HLab):
         out = list(recs)
         if tokens is not None:
             out.append(usage_entry(tokens, ts="2026-03-01T13:00:00Z"))
-        out.append(entry("user", prompt, "cur-prompt", ts(0, day=2)))
+        out.append(entry("user", prompt, "cur-" + re.sub(r"\W", "", prompt)[:40], ts(0, day=2)))  # one uuid for each prompt
         out += list(tail)
         self.put(self.sid, out)
         return out
@@ -103,8 +97,7 @@ class G(HLab):
         return guard_text(self.run_stop(reply, extra=extra, **kw))
 
     def run_action(self, tool, tool_input, extra=None, raw=None, payload=None):
-        p = {"session_id": self.sid, "transcript_path": self.session, "cwd": self.proj, "hook_event_name": ACTION_EVENT,
-             "tool_name": tool, "tool_input": tool_input, "tool_response": {"ok": True}, "tool_use_id": "toolu_act"}
+        p = {"session_id": self.sid, "transcript_path": self.session, "cwd": self.proj, "hook_event_name": ACTION_EVENT}
         p["tool_calls"] = [{"tool_name": tool, "tool_input": tool_input, "tool_response": {"ok": True},
                             "tool_use_id": "toolu_act"}]
         p.update(payload or {})
@@ -120,7 +113,7 @@ class G(HLab):
         extra = dict(kw.pop("extra", None) or {})
         if mode is not None:
             extra["HANDOFF_ACTION_GUARD"] = mode
-        return guard_text(self.run_action(tool, tool_input, extra=extra, **kw))
+        return guard_text(self.run_action(tool, tool_input, extra=extra, **kw), ACTION_EVENT)
 
     def rows(self, name="history-guard.jsonl"):
         p = os.path.join(self.state, name)

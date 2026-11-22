@@ -3,9 +3,9 @@ It scans the tool_input of Edit, Write, MultiEdit, NotebookEdit (new text, not o
 identifiers (F75 rule, first 60; not existing paths below cwd, not the file_path field). Subjects, evidence, cooldown,
 threshold (100,000 tokens, env HANDOFF_ACTION_GUARD_TOKENS), the 4-subject limit and the caps are the same as F77, and F77
 and F80 share one cooldown table. The event (PostToolBatch or the PostToolUse fallback) is the builder's choice: the
-payload here carries both the single-call fields and a `tool_calls` list, and the output is accepted in either documented
-form. Set ACTION_GUARD_EVENT=PostToolBatch to send that event name."""
-import json, os, re, sys, unittest
+product spec pins the event PostToolBatch: the input holds `tool_calls`, the output is
+{"hookSpecificOutput": {"hookEventName": "PostToolBatch", "additionalContext": text}}, and there is no matcher."""
+import json, os, re, shutil, sys, unittest
 
 from guard_common import (G, ACTION_LINE1, GUARD_LINE1, HEALTH_KEYS, KEY, chain, guard_text, SID1, ts, entry, bash_call,
                           mcp_call, tool_result, injection, usage_entry, HIST_LINE1, ENTRY_RE)
@@ -92,9 +92,9 @@ class Gates(G):
         self.assertEqual(self.act("Bash", {"command": "echo queue-depth=1"}), "")
         self.tx(chain(KEY, 2, 1), tokens=100000)
         self.assertNotEqual(self.act("Bash", {"command": "echo queue-depth=1"}), "")
-        self.tx(chain(KEY, 2, 1), tokens=30000, prompt="again")
-        self.assertEqual(self.act("Bash", {"command": "echo queue-depth=1"}), "")
-        self.assertNotEqual(self.act("Bash", {"command": "echo queue-depth=1"}, extra={"HANDOFF_ACTION_GUARD_TOKENS": "20000"}), "")
+        self.tx(chain("other-key", 2, 1), tokens=30000, prompt="again")
+        self.assertEqual(self.act("Bash", {"command": "echo other-key=1"}), "")
+        self.assertNotEqual(self.act("Bash", {"command": "echo other-key=1"}, extra={"HANDOFF_ACTION_GUARD_TOKENS": "20000"}), "")
 
     def test_f80_the_f77_env_does_not_set_the_f80_threshold(self):
         self.tx(chain(KEY, 2, 1), tokens=30000)
@@ -165,7 +165,19 @@ class Modes(G):
         self.assertNotIn("permissionDecision", raw)
         self.assertNotIn('"deny"', raw)
         o = json.loads(raw)
-        self.assertIsInstance(o, dict)
+        self.assertEqual(set(o), {"hookSpecificOutput"})
+        self.assertEqual(o["hookSpecificOutput"]["hookEventName"], "PostToolBatch")
+
+    def test_f80_a_batch_of_calls_is_scanned_together_and_tool_response_is_ignored(self):
+        p = {"session_id": SID1, "transcript_path": self.session, "cwd": self.proj, "hook_event_name": "PostToolBatch",
+             "tool_calls": [{"tool_name": "Read", "tool_input": {"file_path": "/x/a"}, "tool_response": "queue-depth", "tool_use_id": "t1"},
+                            {"tool_name": "Bash", "tool_input": {"command": "echo queue-depth=1"}, "tool_response": "", "tool_use_id": "t2"}]}
+        out = guard_text(self.run_action("Bash", {}, raw=json.dumps(p), extra={"HANDOFF_ACTION_GUARD": "inject"}), "PostToolBatch")
+        self.assertEqual(self.blocks(out), [KEY])
+        p["tool_calls"] = p["tool_calls"][:1]
+        self.tx(chain(KEY, 2, 1), prompt="another request")
+        out = guard_text(self.run_action("Bash", {}, raw=json.dumps(p), extra={"HANDOFF_ACTION_GUARD": "inject"}), "PostToolBatch")
+        self.assertEqual(out, "", "tool_response is ignored")
 
     def test_f80_health_row_has_the_f77_fields_plus_tool_and_no_text(self):
         self.act("Bash", {"command": "echo queue-depth=1 SECRETCMDWORD"})
@@ -184,12 +196,16 @@ class Modes(G):
 
 
 class HooksHome(G):
-    def test_f80_recall_py_comes_from_handoff_hooks_home_with_no_fallback(self):
+    def test_f80_a_decoy_recall_py_beside_the_entry_file_is_not_used_when_the_override_names_a_folder(self):
         self.tx(chain(KEY, 2, 1))
-        empty = os.path.join(self.tmp, "empty-hooks")
-        os.makedirs(empty)
-        self.assertEqual(self.act("Bash", {"command": "echo queue-depth=1"}, extra={"HANDOFF_HOOKS_HOME": empty}), "")
-        self.assertNotEqual(self.act("Bash", {"command": "echo queue-depth=1"}, extra={"HANDOFF_HOOKS_HOME": self.hooks}), "")
+        real = os.path.join(self.tmp, "real-hooks")
+        shutil.copytree(self.hooks, real)
+        trace = os.path.join(self.tmp, "decoy.trace")
+        with open(os.path.join(self.hooks, "recall.py"), "w") as f:
+            f.write("import os\nopen(os.environ['DECOY_TRACE'], 'w').write('used')\nraise SystemExit(0)\n")
+        out = self.act("Bash", {"command": "echo queue-depth=1"}, extra={"HANDOFF_HOOKS_HOME": real, "DECOY_TRACE": trace})
+        self.assertFalse(os.path.exists(trace), "the guard used the decoy beside the entry file")
+        self.assertNotEqual(out, "")
 
 
 class Errors(G):

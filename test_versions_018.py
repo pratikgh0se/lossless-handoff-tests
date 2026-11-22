@@ -25,7 +25,7 @@ class Versions(unittest.TestCase):
 
     def test_hook_version_constants_are_1_20_0_in_every_hook_that_has_one(self):
         for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py", "recall-mcp.py", "reanchor.py",
-                  "claim-guard.py", "history-guard.py", "action-guard.py"):
+                  "claim-guard.py", "history-guard.py", "action-guard.py", "guard_common.py"):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
