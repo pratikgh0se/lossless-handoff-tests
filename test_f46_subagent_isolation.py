@@ -320,7 +320,7 @@ class Version(unittest.TestCase):
     def test_ac188_hook_version_in_both_hooks(self):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
-                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.16\.0["']""")
+                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.17\.0["']""")
 
 
 class VersionInHealth(F46Base):
@@ -330,8 +330,8 @@ class VersionInHealth(F46Base):
         self.write_transcript([user(PARENT_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.16.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.16.0")
+        self.assertEqual(self.health()["hook_version"], "1.17.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.17.0")
 
 
 if __name__ == "__main__":
