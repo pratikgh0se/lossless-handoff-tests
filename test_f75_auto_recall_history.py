@@ -253,8 +253,9 @@ class PromptRecord(Base):
     def test_f75_amend_a_short_prompt_matches_by_equal_text_only(self):
         short = "previously a-b-c"
         self.assertLess(len(short), 20)
-        recs = self.chain("a-b-c", 2) + [entry("user", short, "cur", ts(20)),
-                                         entry("user", "see: previously a-b-c ok DECORATED", "dec", ts(22))]
+        # the prompt record is the last user record when the hook runs; an earlier decorated record is an ordinary message
+        recs = self.chain("a-b-c", 2) + [entry("user", "see: previously a-b-c ok DECORATED", "dec", ts(15)),
+                                         entry("user", short, "cur", ts(20))]
         self.put(SID1, recs)
         out = self.ctx(short)
         self.assertIn("DECORATED", out, "a short prompt is matched by equal text only")
