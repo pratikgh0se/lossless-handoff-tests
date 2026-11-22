@@ -21,6 +21,11 @@ def hits_of(text):
 class Server(HookBase):
     """HookBase gives the project, the transcript folder and `seed()` (see test_f67_auto_recall)."""
 
+    def seed(self, messages, current=None):
+        # 0.17.0 (F73/F74): the MCP tools leave out the current prompt (the last user prompt and what follows), so every
+        # fixture ends with a closing user prompt that has no query words.
+        super().seed(list(messages) + [("user", "an unrelated closing prompt")], current)
+
     def setUp(self):
         super().setUp()
         self.hooks = os.path.join(self.home, ".claude", "hooks")

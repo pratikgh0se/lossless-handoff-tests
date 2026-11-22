@@ -312,7 +312,7 @@ class Query(HookBase):
         self.silent("what did i say on postgres")  # one word of 4+ characters
 
     def test_f67_c_two_long_words_are_enough(self):
-        out = self.ctx("what did i say about postgres")
+        out = self.ctx("what did i say about postgres database")  # `about` is a stop word since 0.17.0
         self.assertTrue(out.startswith(HEADER), out[:200])
 
     def test_f67_c_cue_phrases_do_not_count_as_query_words(self):

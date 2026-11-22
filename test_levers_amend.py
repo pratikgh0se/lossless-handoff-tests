@@ -354,7 +354,7 @@ class McpAmend(HookBase):
         copy_hook_scripts(self.hooks)
         self.clients = []
         self.seed([("user", "We decided to use the postgres database for the billing service BILLINGMARK"),
-                   ("user", "Run the exporter with the -x flag and the zebra option")])
+                   ("user", "Run the exporter with the -x flag and the zebra option"), ("user", "an unrelated closing prompt")])
 
     def tearDown(self):
         for c in self.clients:
