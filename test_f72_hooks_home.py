@@ -336,29 +336,59 @@ class Precompact(Base):
     def trace_text(self):
         return open(self.trace).read() if self.traced() else ""
 
-    def test_f72_precompact_uses_the_recall_py_of_the_override_folder(self):
-        self.decoys(recall=True, marker=False)  # HOME recall.py writes "recall" to the trace
+    def handoff(self):
+        with open(os.path.join(self.hd, "S-latest.md")) as f:
+            return f.read()
+
+    def mark(self, folder, word):
+        """Append a line to the recall.py of `folder`: it writes `word` to the trace when the module runs."""
+        with open(os.path.join(folder, "recall.py"), "a") as f:
+            f.write('\nimport os as _o\nopen(_o.path.join(_o.environ["HOME"], "decoy-trace"), "a").write("%s\\n")\n' % word)
+
+    def recall_lines(self):
+        return [l for l in self.handoff().split("\n") if l.startswith("- recall:")]
+
+    def test_f72_positive_control_the_handoff_has_the_recall_line_when_p_holds_recall_py(self):
+        p = self.private()
+        self.run_pre(p, p)
+        self.assertEqual(len(self.recall_lines()), 1, "a handoff made with recall.py in P must have the recall line")
+
+    def test_f72_no_recall_py_in_p_means_no_recall_line_even_if_home_and_the_entry_folder_have_one(self):
+        self.decoys(recall=True, marker=False)  # HOME recall.py (decoy, writes "home")
+        entry_dir = self.private()  # the folder beside the entry has the real recall.py
+        self.mark(entry_dir, "beside")
+        p = self.private(drop=("recall.py",))
+        self.run_pre(entry_dir, p)
+        self.assertEqual(self.recall_lines(), [], "the recall line came from a recall.py outside the override folder")
+        self.assertNotIn("beside", self.trace_text())
+        self.assertNotIn("home", self.trace_text())
+        self.assertFalse(self.traced(), self.trace_text())
+
+    def test_f72_the_recall_py_of_p_is_the_one_used(self):
+        self.decoys(recall=True, marker=False)
         entry_dir = self.private()
-        with open(os.path.join(entry_dir, "recall.py"), "a") as f:  # the copy beside the entry writes "beside"
-            f.write('\nimport os as _o\nopen(_o.path.join(_o.environ["HOME"], "decoy-trace"), "a").write("beside\\n")\n')
-        good = self.private()
-        self.run_pre(entry_dir, good)
-        self.assertEqual(self.trace_text(), "", "a recall.py other than the one in the override folder was used")
-        self.assertTrue(os.path.exists(os.path.join(self.hd, "S-latest.md")), "the handoff is still written")
+        self.mark(entry_dir, "beside")
+        p = self.private()
+        self.mark(p, "P")
+        self.run_pre(entry_dir, p)
+        self.assertEqual(len(self.recall_lines()), 1)
+        t = self.trace_text().split()
+        self.assertNotIn("beside", t)
+        self.assertNotIn("recall", t, "the decoy recall.py of HOME ran")
+        # if the entry loads recall.py (for redact), the trace shows P's copy; if it only checks the file, the trace is empty
 
     def test_f72_entry_run_from_the_override_folder_itself_runs_nothing_from_elsewhere(self):
         self.decoys(recall=True, post=True, marker=True)
         p = self.private()
         self.run_pre(p, p)
         self.assertEqual(self.trace_text(), "")
-        self.assertTrue(os.path.exists(os.path.join(self.hd, "S-latest.md")))
+        self.assertEqual(len(self.recall_lines()), 1)
 
-    def test_f72_precompact_without_the_override_uses_the_home_recall_py_lookup_as_before(self):
-        # no override: behaviour as before (the entry works from its own folder and writes the handoff)
+    def test_f72_precompact_without_the_override_works_from_its_own_folder_as_before(self):
         self.decoys(recall=False, marker=False)
         p = self.private()
         self.run_pre(p, None)
-        self.assertTrue(os.path.exists(os.path.join(self.hd, "S-latest.md")))
+        self.assertEqual(len(self.recall_lines()), 1)
 
 
 if __name__ == "__main__":
