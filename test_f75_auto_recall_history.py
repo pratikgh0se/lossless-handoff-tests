@@ -150,6 +150,74 @@ class Identifiers(Base):
             self.assertNotIn(leak, out)
 
 
+class Amendment(Base):
+    """F75 amendment (2026-11-22): regex-form tokens first, then the backticked tokens that do not match the regex form.
+    A backticked stop-list word, or a common lowercase word of 8 or fewer letters with no digit, is not an identifier.
+    "The first 3" counts only identifiers that have a mention."""
+
+    def put_keys(self, keys, extra=()):
+        recs = []
+        for i, k in enumerate(keys):
+            recs += self.chain(k, 2, start=i * 3)
+        for w in extra:
+            recs.append(entry("user", "the %s is mentioned here" % w, "w-%s" % w, ts(40)))
+        self.put(SID1, recs + [entry("user", "x", "cur", ts(55))])
+
+    def test_f75_amend_regex_tokens_come_before_backticked_tokens(self):
+        self.put_keys(["Zeta", "invoice-mailer"])
+        out = self.ctx("what did we decide about `Zeta` and invoice-mailer")
+        self.assertEqual(self.blocks(out), ["invoice-mailer", "Zeta"], out)
+        self.assertEqual(FULL_RE.match(out.split("\n")[-1]).group("ident"), "invoice-mailer")
+
+    def test_f75_amend_backticked_tokens_keep_prompt_order_among_themselves(self):
+        self.put_keys(["Beta", "Alpha"])
+        out = self.ctx("what did we decide about `Beta` and `Alpha`")
+        self.assertEqual(self.blocks(out), ["Beta", "Alpha"], out)
+
+    def test_f75_amend_a_backticked_regex_form_token_counts_as_a_regex_token(self):
+        self.put_keys(["Zeta", "billing-db"])
+        out = self.ctx("what did we decide about `Zeta` and `billing-db`")
+        self.assertEqual(self.blocks(out), ["billing-db", "Zeta"], out)
+
+    def test_f75_amend_backticked_common_words_are_not_identifiers(self):
+        words = ["current", "previous", "replaced", "null"]
+        self.put_keys(["real-key"], extra=words)
+        out = self.ctx("what did we decide about `current` `previous` `replaced` `null` and real-key")
+        self.assertEqual(self.blocks(out), ["real-key"], out)
+        row = self.rows()[-1]
+        self.assertEqual((row["mode"], row["identifiers"]), ("history", 1), row)
+
+    def test_f75_amend_each_listed_common_word_alone_is_not_an_identifier(self):
+        for w in ("current", "previous", "replaced", "null"):
+            with self.subTest(w):
+                self.put(SID1, [entry("user", "the %s value is mentioned here with billing database words" % w, "u1", ts(1)),
+                                entry("user", "x", "cur", ts(55))])
+                out = self.ctx("what did we decide about `%s`" % w)
+                self.assertNotEqual(out.split("\n")[0], HIST_HEADER, out)
+                self.assertNotIn("history of", out)
+                self.assertEqual(self.rows()[-1]["identifiers"], 0)
+
+    def test_f75_amend_other_backticked_tokens_stay_identifiers(self):
+        for ident in ("Zeta", "abc123", "verylongsettingname", "MAX"):
+            with self.subTest(ident):
+                self.put(SID1, [entry("user", "%s is set to one" % ident, "u1", ts(1)), entry("user", "x", "cur", ts(55))])
+                out = self.ctx("what did we decide about `%s`" % ident)
+                self.assertEqual(out.split("\n")[0], HIST_HEADER, out)
+                self.assertEqual(self.blocks(out), [ident])
+
+    def test_f75_amend_identifiers_without_a_mention_do_not_use_a_slot(self):
+        self.put_keys(["real-one", "real-two", "real-three", "real-four"])
+        out = self.ctx("what did we decide about ghost-a ghost-b ghost-c real-one real-two real-three real-four")
+        self.assertEqual(self.blocks(out), ["real-one", "real-two", "real-three"], out)
+        self.assertNotIn("ghost", out)
+        self.assertNotIn("real-four", out)
+
+    def test_f75_amend_lure_words_do_not_take_the_slots_before_real_keys(self):
+        self.put_keys(["real-one", "real-two", "real-three"], extra=["current", "previous", "replaced"])
+        out = self.ctx("what did we decide about `current` `previous` `replaced` real-one real-two real-three")
+        self.assertEqual(self.blocks(out), ["real-one", "real-two", "real-three"], out)
+
+
 class Caps(Base):
     def long(self, key, n=40, start=0):
         return [entry("user", "%s step %03d %s" % (key, i, "x" * 150), "%s-%d" % (key, i), ts((start + i) % 60, hour=1 + (start + i) // 60))
