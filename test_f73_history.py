@@ -304,7 +304,8 @@ class Cap(Lab):
 
 class Shrink(Lab):
     """F73 cap amendment: over a cap, shrink in this order and stop at the first step that fits: 1 drop the neighbour
-    sentences; 2 a window of 200 characters centred on the match; 3 a window of 120 characters; 4 the middle cut."""
+    sentences; 2 a window of 200 characters centred on the match; 3 a window of 120 characters; 4 a window of 80
+    characters (auto-recall amendment 2); 5 the middle cut."""
 
     def put_n(self, n, make):
         self.put(SID1, [entry("user", make(i), "u%03d" % i, ts(i % 60, hour=1 + i // 60)) for i in range(n)])
@@ -350,14 +351,25 @@ class Shrink(Lab):
             self.assertLessEqual(len(m.group("text")), 130, m.group("text"))
             self.assertIn("invoice-mailer", m.group("text"))
 
-    def test_f73_step_4_the_middle_cut_comes_last(self):
+    def test_f73_step_4_cuts_each_entry_to_a_window_of_80_characters(self):
+        self.put_n(30, lambda i: "The invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 300, i))
+        out = self.history(KEY)
+        ents = self.entries(out)
+        self.assertEqual(len(ents), 30, out)
+        self.assertFalse(any(OMIT_RE.match(l) for l in self.lines(out)))
+        self.assertLessEqual(len(out.rstrip("\n")), CAP)
+        for m in ents:
+            self.assertLessEqual(len(m.group("text")), 90, m.group("text"))
+            self.assertIn("invoice-mailer", m.group("text"))
+
+    def test_f73_step_5_the_middle_cut_comes_last(self):
         self.put_n(90, lambda i: "The invoice-mailer step %03d %s" % (i, "y" * 300))
         out = self.history(KEY)
         ls = self.lines(out)
         self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 1, out)
         self.assertLessEqual(len(out.rstrip("\n")), CAP)
         for m in self.entries(out):
-            self.assertLessEqual(len(m.group("text")), 130, "the entries were already cut to 120 characters")
+            self.assertLessEqual(len(m.group("text")), 90, "the entries were already cut to 80 characters")
 
     def test_f73_a_14_mention_chain_with_rejected_newest_mentions_keeps_every_mention(self):
         def make(i):
