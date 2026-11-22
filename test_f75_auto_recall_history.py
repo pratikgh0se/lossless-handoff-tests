@@ -285,6 +285,18 @@ class Caps(Base):
         self.assertIn("step 039", ls[end], "the newest entry is kept")
         self.assertTrue(FULL_RE.match(ls[-1]))
 
+    def test_f75_shrink_steps_keep_every_mention_inside_1500_characters(self):
+        self.put(SID1, [entry("user", "The invoice-mailer step %03d %s ENDMARK%03d" % (i, "y" * 300, i), "u%d" % i, ts(i))
+                        for i in range(8)] + [entry("user", "x", "cur", ts(0, day=3))])
+        out = self.ctx("what did we decide about invoice-mailer")
+        ls = out.split("\n")
+        start = ls.index(HIST_LINE1 % ("invoice-mailer", 8))
+        ents = [l for l in ls if ENTRY_RE.match(l)]
+        self.assertEqual(len(ents), 8, out)
+        self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 0, "the 120-character window fits: no middle cut")
+        self.assertLessEqual(len("\n".join(ls[start:start + 1 + 8])), 1500)
+        self.assertNotIn("ENDMARK", out)
+
     def test_f75_three_identifiers_stay_within_4000_characters_in_total(self):
         recs = []
         for i, k in enumerate(("alpha-one", "beta-two", "gamma-three")):
