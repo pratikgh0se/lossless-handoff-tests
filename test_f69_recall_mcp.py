@@ -63,7 +63,7 @@ class Handshake(Server):
         self.assertEqual(r["id"], 1)
         res = r["result"]
         self.assertEqual(res["serverInfo"]["name"], "lossless-recall")
-        self.assertEqual(res["serverInfo"]["version"], "1.18.0")
+        self.assertEqual(res["serverInfo"]["version"], "1.19.0")
         self.assertIn("tools", res["capabilities"])
         self.assertIsInstance(res["protocolVersion"], str)
 
@@ -85,7 +85,7 @@ class Handshake(Server):
         c = self.start()
         tools = c.call("tools/list")["result"]["tools"]
         by = {t["name"]: t for t in tools}
-        self.assertEqual(sorted(by), ["open_message", "search_earlier_chat"])
+        self.assertEqual(sorted(by), ["key_history", "open_message", "search_earlier_chat"])
         for t in tools:
             self.assertEqual(t["_meta"], {"anthropic/alwaysLoad": True}, t["name"])
             self.assertEqual(t["inputSchema"]["type"], "object")
