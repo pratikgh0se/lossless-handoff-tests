@@ -111,7 +111,7 @@ class Mcp(McpBase):
         self.assertIn(DESC_ADD, d)
         self.assertGreater(len(d), len(DESC_ADD))
 
-    def test_f74_mcp_search_excludes_the_current_prompt_and_what_follows(self):
+    def test_f74_mcp_search_excludes_the_current_prompt_record_only(self):
         self.put(SID1, [entry("user", "old: zebrawidget is on", "u1", ts(1)),
                         entry("user", "what is zebrawidget CURRENTPROMPT", "u2", ts(9)),
                         entry("assistant", "about zebrawidget AFTERPROMPT", "a2", ts(10))])
@@ -119,7 +119,7 @@ class Mcp(McpBase):
         out = self.text(c.tool("search_earlier_chat", {"query": "zebrawidget"}))
         self.assertIn("old: zebrawidget", out)
         self.assertNotIn("CURRENTPROMPT", out)
-        self.assertNotIn("AFTERPROMPT", out)
+        self.assertIn("AFTERPROMPT", out, "only the prompt record is hidden, not the records after it")
 
     def test_f74_mcp_search_applies_exclusions_a_b_and_d(self):
         base = [entry("user", "zebrawidget set to a", "u1", ts(1))]

@@ -4,7 +4,7 @@ Rules: whole-token match (boundary chars not in [A-Za-z0-9_./-]), case-insensiti
 before and after; exclusions (a) recall's own tool use and results, (b) auto-recall injections, (c) the current prompt
 (MCP and auto-recall only), (d) fork duplicates; oldest first; exact header and no-match lines; 4,000-character cap with
 the middle cut."""
-import json, os, re, sys, unittest
+import json, os, re, sys, time, unittest
 
 from history_common import (Lab, ENTRY_RE, OMIT_RE, HIST_LINE1, NO_MENTIONS, CAP, SID1, SID2, ts, entry, bash_call,
                             mcp_call, tool_result, injection)
@@ -93,6 +93,15 @@ class Match(Lab):
         self.assertEqual(m.group("ts"), "2026-03-01 09:07")
         self.assertNotRegex(m.group("text"), r"\s{2,}|\t")
         self.assertIn("has many spaces", m.group("text"))
+
+    def test_f73_redaction_runs_on_the_whole_message_before_the_sentence_split(self):
+        self.put(SID1, [entry("user", "invoice-mailer uses -----BEGIN PRIVATE KEY-----\nZZsecretlineXYZ123abcdefghij\n"
+                                      "QQsecondlineXYZ456abcdefghij\n-----END PRIVATE KEY----- and that is all", "u1", ts(1))])
+        out = self.history(KEY)
+        self.assertEqual(len(self.entries(out)), 1, out)
+        self.assertNotIn("ZZsecretlineXYZ123", out)
+        self.assertNotIn("QQsecondlineXYZ456", out)
+        self.assertIn("[REDACTED", out)
 
     def test_f73_text_is_redacted(self):
         key = "sk-" + "FAKEhistory" * 3 + "0001"
@@ -304,7 +313,10 @@ class McpBase(Lab):
             c.close()
 
     def start(self, extra=None):
-        c = Mcp([sys.executable, os.path.join(self.hooks, "recall-mcp.py")], self.env(extra), self.proj)
+        env = {"CLAUDE_CODE_SESSION_ID": SID1}  # the MCP current session (F73 amendment)
+        env.update(extra or {})
+        env = self.env({k: v for k, v in env.items() if v is not None})
+        c = Mcp([sys.executable, os.path.join(self.hooks, "recall-mcp.py")], env, self.proj)
         self.clients.append(c)
         self.init = c.init()
         return c
@@ -364,7 +376,7 @@ class McpTool(McpBase):
         self.assertEqual(ls[0], HIST_LINE1 % (KEY, n))
         self.assertEqual(len([l for l in ls if OMIT_RE.match(l)]), 1, out)
 
-    def test_f73_current_prompt_and_everything_after_it_are_excluded(self):
+    def test_f73_current_prompt_record_is_excluded_and_the_records_after_it_are_not(self):
         self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1)),
                         entry("assistant", "ok invoice-mailer noted", "a1", ts(2)),
                         entry("user", "what is invoice-mailer set to CURRENTPROMPT", "u2", ts(9)),
@@ -372,8 +384,62 @@ class McpTool(McpBase):
         c = self.start()
         out = self.text(c.tool("key_history", {"identifier": KEY}))
         self.assertNotIn("CURRENTPROMPT", out)
-        self.assertNotIn("AFTERPROMPT", out)
-        self.assertEqual(len(self.entries(out)), 2, out)
+        self.assertIn("AFTERPROMPT", out)
+        self.assertEqual(len(self.entries(out)), 3, out)
+
+    def test_f73_without_the_session_variable_the_prompt_is_not_excluded(self):
+        self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1)),
+                        entry("user", "what is invoice-mailer set to CURRENTPROMPT", "u2", ts(9))])
+        c = self.start({"CLAUDE_CODE_SESSION_ID": None})
+        self.assertIn("CURRENTPROMPT", self.text(c.tool("key_history", {"identifier": KEY})))
+
+    def test_f73_a_session_id_with_no_transcript_does_not_exclude_and_does_not_guess_the_newest(self):
+        self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1)),
+                        entry("user", "what is invoice-mailer set to CURRENTPROMPT", "u2", ts(9))])
+        c = self.start({"CLAUDE_CODE_SESSION_ID": "99999999-0000-4000-8000-000000000009"})
+        self.assertIn("CURRENTPROMPT", self.text(c.tool("key_history", {"identifier": KEY})))
+
+    def test_f73_a_transcript_last_written_over_600_seconds_ago_is_not_current(self):
+        self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1)),
+                        entry("user", "what is invoice-mailer set to CURRENTPROMPT", "u2", ts(9))])
+        path = os.path.join(self.tdir, SID1 + ".jsonl")
+        old = time.time() - 700
+        os.utime(path, (old, old))
+        c = self.start()
+        self.assertIn("CURRENTPROMPT", self.text(c.tool("key_history", {"identifier": KEY})))
+
+    def test_f73_a_transcript_written_within_600_seconds_is_current(self):
+        self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1)),
+                        entry("user", "what is invoice-mailer set to CURRENTPROMPT", "u2", ts(9))])
+        path = os.path.join(self.tdir, SID1 + ".jsonl")
+        t = time.time() - 500
+        os.utime(path, (t, t))
+        c = self.start()
+        self.assertNotIn("CURRENTPROMPT", self.text(c.tool("key_history", {"identifier": KEY})))
+
+    def test_f73_the_variable_picks_its_own_session_not_the_newest_file(self):
+        self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1)),
+                        entry("user", "what is invoice-mailer set to PROMPTONE", "u2", ts(9))])
+        self.put(SID2, [entry("user", "other: invoice-mailer here", "v1", ts(2), sid=SID2),
+                        entry("user", "what is invoice-mailer set to PROMPTTWO", "v2", ts(10), sid=SID2)])
+        c = self.start({"CLAUDE_CODE_SESSION_ID": SID1})
+        out = self.text(c.tool("key_history", {"identifier": KEY}))
+        self.assertNotIn("PROMPTONE", out)
+        self.assertIn("PROMPTTWO", out)
+
+    def test_f73_a_subagent_transcript_is_not_the_current_session(self):
+        self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1))])
+        self.put(SID1, [entry("user", "sub: invoice-mailer SUBPROMPT", "s1", ts(2), sid=SID1)], sub="a1b2c3d4e5f6a7b8")
+        c = self.start()
+        self.assertIn("SUBPROMPT", self.text(c.tool("key_history", {"identifier": KEY})))
+
+    def test_f73_the_prompt_is_the_last_user_text_record_even_with_tool_results_after_it(self):
+        self.put(SID1, [entry("user", "old: invoice-mailer is on", "u1", ts(1)),
+                        entry("user", "what is invoice-mailer set to CURRENTPROMPT", "u2", ts(9)),
+                        bash_call("ls", "b1", ts(10), tid="t1"),
+                        tool_result("done", "r1", ts(11), tid="t1")])
+        c = self.start()
+        self.assertNotIn("CURRENTPROMPT", self.text(c.tool("key_history", {"identifier": KEY})))
 
     def test_f73_recall_tool_use_is_excluded_in_the_tool_too(self):
         self.put(SID1, [entry("user", "invoice-mailer real", "u1", ts(1)),

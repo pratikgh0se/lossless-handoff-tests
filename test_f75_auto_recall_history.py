@@ -218,6 +218,54 @@ class Amendment(Base):
         self.assertEqual(self.blocks(out), ["real-one", "real-two", "real-three"], out)
 
 
+class PromptRecord(Base):
+    """F73 amendment: auto-recall hides only the record of the current prompt, matched by equal text or, for a prompt of
+    20 or more characters, by its first 80 characters found in the record. The session is the hook's transcript_path."""
+
+    def put_with(self, prompt_record_text, after=True):
+        recs = self.chain("invoice-mailer", 2) + [entry("user", prompt_record_text, "cur", ts(20))]
+        if after:
+            recs.append(entry("assistant", "AFTERMARK the invoice-mailer was changed", "aft", ts(21)))
+        self.put(SID1, recs)
+
+    PROMPT = "what did we decide about invoice-mailer PROMPTMARK"
+
+    def test_f75_amend_the_record_after_the_prompt_is_kept(self):
+        self.put_with(self.PROMPT)
+        out = self.ctx(self.PROMPT)
+        self.assertNotIn("PROMPTMARK", out)
+        self.assertIn("AFTERMARK", out)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 3))
+
+    def test_f75_amend_a_record_that_holds_the_first_80_characters_is_the_prompt(self):
+        self.put_with("<ide_opened_file>a.py</ide_opened_file> " + self.PROMPT + " and some trailing context words")
+        out = self.ctx(self.PROMPT)
+        self.assertNotIn("PROMPTMARK", out)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 3))
+
+    def test_f75_amend_only_the_first_80_characters_are_compared(self):
+        long_prompt = "what did we decide about invoice-mailer " + "w" * 60 + " ENDMARK"
+        self.put_with(long_prompt[:80] + " but the record ends differently TAILMARK")
+        out = self.ctx(long_prompt)
+        self.assertNotIn("TAILMARK", out)
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("invoice-mailer", 3))
+
+    def test_f75_amend_a_short_prompt_matches_by_equal_text_only(self):
+        short = "previously a-b-c"
+        self.assertLess(len(short), 20)
+        recs = self.chain("a-b-c", 2) + [entry("user", short, "cur", ts(20)),
+                                         entry("user", "see: previously a-b-c ok DECORATED", "dec", ts(22))]
+        self.put(SID1, recs)
+        out = self.ctx(short)
+        self.assertIn("DECORATED", out, "a short prompt is matched by equal text only")
+        self.assertEqual(out.split("\n")[1], HIST_LINE1 % ("a-b-c", 3))
+
+    def test_f75_amend_a_prompt_with_no_matching_record_hides_nothing(self):
+        self.put_with("a totally different last record about invoice-mailer LASTREC")
+        out = self.ctx("what did we decide about invoice-mailer PROMPTMARK")
+        self.assertIn("LASTREC", out)
+
+
 class Caps(Base):
     def long(self, key, n=40, start=0):
         return [entry("user", "%s step %03d %s" % (key, i, "x" * 150), "%s-%d" % (key, i), ts((start + i) % 60, hour=1 + (start + i) // 60))
