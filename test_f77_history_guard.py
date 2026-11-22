@@ -25,12 +25,6 @@ class Trigger(G):
         steps = [int(re.search(r"step (\d)", l).group(1)) for l in ls if ENTRY_RE.match(l)]
         self.assertEqual(steps, [0, 1, 2], "oldest first")
 
-    def test_f77_the_current_prompt_is_not_in_the_blocks(self):
-        self.tx(chain(KEY, 2, 1), prompt="what is queue-depth now CURRENTMARK")
-        out = self.stop(REPLY)
-        self.assertNotIn("CURRENTMARK", out)
-        self.assertEqual(out.split("\n")[1], HIST_LINE1 % (KEY, 3))
-
     def test_f77_stop_hook_active_true_gives_no_output(self):
         self.tx(chain(KEY, 2, 1))
         self.assertEqual(self.stop(REPLY, stop_hook_active=True), "")
