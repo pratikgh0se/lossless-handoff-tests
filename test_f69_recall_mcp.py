@@ -22,7 +22,7 @@ class Server(HookBase):
     """HookBase gives the project, the transcript folder and `seed()` (see test_f67_auto_recall)."""
 
     def seed(self, messages, current=None):
-        # 0.17.0 (F73/F74): the MCP tools leave out the current prompt (the last user prompt and what follows), so every
+        # 0.18.0 (F73/F74): the MCP tools leave out the current prompt (the last user prompt and what follows), so every
         # fixture ends with a closing user prompt that has no query words.
         super().seed(list(messages) + [("user", "an unrelated closing prompt")], current)
 
@@ -68,7 +68,7 @@ class Handshake(Server):
         self.assertEqual(r["id"], 1)
         res = r["result"]
         self.assertEqual(res["serverInfo"]["name"], "lossless-recall")
-        self.assertEqual(res["serverInfo"]["version"], "1.19.0")
+        self.assertEqual(res["serverInfo"]["version"], "1.20.0")
         self.assertIn("tools", res["capabilities"])
         self.assertIsInstance(res["protocolVersion"], str)
 

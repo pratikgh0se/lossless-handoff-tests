@@ -1,4 +1,4 @@
-"""Amendments of 2026-11-22 to the 0.17.0 contract (F68, F69, F70, F71, F72 and the file modes). Code-blind: written from
+"""Amendments of 2026-11-22 to the 0.18.0 contract (F68, F69, F70, F71, F72 and the file modes). Code-blind: written from
 contract-0.16.md only. See the class docstrings for the rule that each class covers."""
 import json, os, re, stat, subprocess, sys, threading, unittest
 

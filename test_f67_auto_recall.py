@@ -1,5 +1,5 @@
 """F67 Auto-recall, opt-in (code-blind: written from the orchestrator contract contract-0.15.md, F67.a-e; no hook or installer
-source was read). Release 0.17.0, hooks 1.19.0.
+source was read). Release 0.18.0, hooks 1.20.0.
 
 F67.a  `hooks/auto-recall.py` is a UserPromptSubmit command hook (`python3 <hooks dir>/auto-recall.py`, timeout 5). It is
        opt-in: `install.sh --auto-recall`. `--save-defaults` writes `auto_recall=1`; `--no-auto-recall` turns a saved
@@ -13,7 +13,7 @@ F67.c  Query: the prompt without the cue phrases, the 8 longest words of 4+ char
        ~/.claude/hooks/recall.py open <id>`. The current prompt is excluded. No hits = no output. Exit code is always 0.
 F67.d  Each run that passes the trigger appends one JSON line {"ts","session_id","fired":true,"hits","ms","timed_out"} to
        `~/.local/state/claude-handoffs/auto-recall.jsonl`: no prompt text, no snippets.
-F67.e  Product 0.17.0, HOOK_VERSION 1.19.0 (auto-recall.py too).
+F67.e  Product 0.18.0, HOOK_VERSION 1.20.0 (auto-recall.py too).
 
 Assumptions (the contract is silent): stdout may be the plain text or a JSON `hookSpecificOutput.additionalContext` object;
 both are accepted. The last line is exact, with a literal `<id>`. Fixtures are fake transcripts in a temp HOME;
@@ -312,7 +312,7 @@ class Query(HookBase):
         self.silent("what did i say on postgres")  # one word of 4+ characters
 
     def test_f67_c_two_long_words_are_enough(self):
-        out = self.ctx("what did i say about postgres database")  # `about` is a stop word since 0.17.0
+        out = self.ctx("what did i say about postgres database")  # `about` is a stop word since 0.18.0
         self.assertTrue(out.startswith(HEADER), out[:200])
 
     def test_f67_c_cue_phrases_do_not_count_as_query_words(self):
@@ -485,29 +485,29 @@ class Health(HookBase):
 
 # ------------------------------------------------------------------ F67.e versions
 class Versions(unittest.TestCase):
-    def test_f67_e_install_sh_version_is_0_17_0(self):
+    def test_f67_e_install_sh_version_is_0_18_0(self):
         home = os.path.realpath(tempfile.mkdtemp(prefix="f67v-"))
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--version")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.17.0", r.stdout + r.stderr)
+        self.assertIn("0.18.0", r.stdout + r.stderr)
 
-    def test_f67_e_installed_manifest_version_is_1_19_0(self):
+    def test_f67_e_installed_manifest_version_is_1_20_0(self):
         home, _ = installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.19.0")
+            self.assertEqual(json.load(f)["version"], "1.20.0")
 
-    def test_f67_e_changelog_has_0_17_0_first(self):
+    def test_f67_e_changelog_has_0_18_0_first(self):
         with open(os.path.join(REPO, "CHANGELOG.md")) as f:
             heads = re.findall(r"(?m)^## \[([0-9.]+)\]", f.read())
-        self.assertEqual(heads[0], "0.17.0")
+        self.assertEqual(heads[0], "0.18.0")
 
-    def test_f67_e_hook_version_constants_are_1_19_0(self):
+    def test_f67_e_hook_version_constants_are_1_20_0(self):
         for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py"):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.19\.0["']""", n)
+                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.20\.0["']""", n)
 
     def test_f67_e_auto_recall_file_is_in_the_manifest_when_installed(self):
         home, _ = installed_home("--auto-recall")
