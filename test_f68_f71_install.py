@@ -1,5 +1,5 @@
-"""Install, uninstall, dry-run, saved defaults and the kept line for the four levers of 0.17.0 (F68-F71), plus the
-versions (0.17.0 / 1.19.0). Code-blind: written from contract-0.16.md. Every lever is opt-in and follows the F64 rules.
+"""Install, uninstall, dry-run, saved defaults and the kept line for the four levers of 0.18.0 (F68-F71), plus the
+versions (0.18.0 / 1.20.0). Code-blind: written from contract-0.16.md. Every lever is opt-in and follows the F64 rules.
 `claude mcp add` is tested with a fake `claude` on PATH that records its arguments, and with no `claude` on PATH."""
 import json, os, re, shutil, stat, tempfile, unittest
 
@@ -309,30 +309,30 @@ class AllTogether(InstBase):
 
 
 class Versions(unittest.TestCase):
-    def test_install_sh_version_is_0_17_0(self):
+    def test_install_sh_version_is_0_18_0(self):
         home = os.path.realpath(tempfile.mkdtemp(prefix="lev-v-"))
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--version")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.17.0", r.stdout + r.stderr)
+        self.assertIn("0.18.0", r.stdout + r.stderr)
 
-    def test_installed_manifest_version_is_1_19_0(self):
+    def test_installed_manifest_version_is_1_20_0(self):
         home, _ = installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.19.0")
+            self.assertEqual(json.load(f)["version"], "1.20.0")
 
-    def test_changelog_has_0_17_0_first(self):
+    def test_changelog_has_0_18_0_first(self):
         with open(os.path.join(REPO, "CHANGELOG.md")) as f:
             heads = re.findall(r"(?m)^## \[([0-9.]+)\]", f.read())
-        self.assertEqual(heads[0], "0.17.0")
+        self.assertEqual(heads[0], "0.18.0")
 
-    def test_hook_version_constants_are_1_19_0_in_every_hook_that_has_one(self):
+    def test_hook_version_constants_are_1_20_0_in_every_hook_that_has_one(self):
         for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py", "recall-mcp.py", "reanchor.py",
                   "claim-guard.py"):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.19\.0["']""", n)
+                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.20\.0["']""", n)
 
     def test_levers_are_in_the_manifest_when_installed(self):
         home, _ = installed_home("--reanchor", "--claim-guard")
