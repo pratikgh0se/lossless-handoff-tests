@@ -314,29 +314,51 @@ class Reanchor(Base):
 
 
 class Precompact(Base):
-    def payload(self, tp):
-        return {"session_id": "S", "cwd": self.proj, "trigger": "auto", "transcript_path": tp}
+    """The parts of a hook (`lossless_handoff/*.py`) always load from beside the entry file that runs. F72 covers the
+    lookups of other installed files: `recall.py` (loaded by the parts for `redact()`), the marker, `recall-mcp.py`,
+    `postcompact-inject.py`. So with the override, the recall.py of the override folder is used, not the one of HOME
+    and not the one beside the entry."""
 
-    def test_f72_precompact_with_the_override_does_not_use_the_package_next_to_the_hook(self):
+    def payload(self):
         tp = os.path.join(self.home, ".claude", "projects", "x", "S.jsonl")
         write_transcript(tp, [{"type": "user", "message": {"role": "user", "content": "Please fix the billing exporter now"}},
                               {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}}])
-        script_dir = self.private()
-        good = self.private()
-        pkg = os.path.join(script_dir, "lossless_handoff")
-        if not os.path.isdir(pkg):
-            self.skipTest("this tree has no lossless_handoff package")
-        for n in os.listdir(pkg):
-            if n in ("summary.py", "prove.py"):  # F72.a: only these two parts follow the override
-                with open(os.path.join(pkg, n), "a") as f:
-                    f.write('\nimport os as _o\nopen(_o.path.join(_o.environ["HOME"], "decoy-trace"), "a").write("%s\\n")\n' % n)
-        env_extra = {"HANDOFF_HAIKU_FALLBACK": "0"}
-        r = subprocess.run([sys.executable, os.path.join(script_dir, "precompact-handoff.py")], input=json.dumps(self.payload(tp)),
-                           capture_output=True, text=True, env=self.env(dict(env_extra, HANDOFF_HOOKS_HOME=good)),
-                           cwd=self.proj, timeout=120)
+        return {"session_id": "S", "cwd": self.proj, "trigger": "auto", "transcript_path": tp}
+
+    def run_pre(self, folder, override):
+        env = self.env({"HANDOFF_HAIKU_FALLBACK": "0"} if override is None else
+                       {"HANDOFF_HAIKU_FALLBACK": "0", "HANDOFF_HOOKS_HOME": override})
+        r = subprocess.run([sys.executable, os.path.join(folder, "precompact-handoff.py")],
+                           input=json.dumps(self.payload()), capture_output=True, text=True, env=env, cwd=self.proj,
+                           timeout=120)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertFalse(self.traced(), open(self.trace).read() if self.traced() else "")
+
+    def trace_text(self):
+        return open(self.trace).read() if self.traced() else ""
+
+    def test_f72_precompact_uses_the_recall_py_of_the_override_folder(self):
+        self.decoys(recall=True, marker=False)  # HOME recall.py writes "recall" to the trace
+        entry_dir = self.private()
+        with open(os.path.join(entry_dir, "recall.py"), "a") as f:  # the copy beside the entry writes "beside"
+            f.write('\nimport os as _o\nopen(_o.path.join(_o.environ["HOME"], "decoy-trace"), "a").write("beside\\n")\n')
+        good = self.private()
+        self.run_pre(entry_dir, good)
+        self.assertEqual(self.trace_text(), "", "a recall.py other than the one in the override folder was used")
         self.assertTrue(os.path.exists(os.path.join(self.hd, "S-latest.md")), "the handoff is still written")
+
+    def test_f72_entry_run_from_the_override_folder_itself_runs_nothing_from_elsewhere(self):
+        self.decoys(recall=True, post=True, marker=True)
+        p = self.private()
+        self.run_pre(p, p)
+        self.assertEqual(self.trace_text(), "")
+        self.assertTrue(os.path.exists(os.path.join(self.hd, "S-latest.md")))
+
+    def test_f72_precompact_without_the_override_uses_the_home_recall_py_lookup_as_before(self):
+        # no override: behaviour as before (the entry works from its own folder and writes the handoff)
+        self.decoys(recall=False, marker=False)
+        p = self.private()
+        self.run_pre(p, None)
+        self.assertTrue(os.path.exists(os.path.join(self.hd, "S-latest.md")))
 
 
 if __name__ == "__main__":
