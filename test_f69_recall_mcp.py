@@ -101,7 +101,7 @@ class Handshake(Server):
 class Protocol(Server):
     def test_f69_protocol_version_is_echoed_when_known_else_the_default(self):
         for v, want in (("2025-11-25", "2025-11-25"), ("2025-06-18", "2025-06-18"), ("2025-03-26", "2025-03-26"),
-                        ("2024-11-05", "2024-11-05"), ("1999-01-01", "2025-06-18")):
+                        ("2024-11-05", "2024-11-05"), ("1999-01-01", "2025-11-25")):
             with self.subTest(v):
                 c = self.start(init=False)
                 r = c.call("initialize", {"protocolVersion": v, "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}})
