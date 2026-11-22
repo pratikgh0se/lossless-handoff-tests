@@ -31,8 +31,16 @@ KEPT = "auto-recall: already installed, kept"
 HOOK_REL = ".claude/hooks/auto-recall.py"
 HIT_RE = re.compile(r"^- (?P<id>\S+) (?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d) (?P<role>user|assistant): (?P<snip>.*)$")
 OPEN_LINE = "Open one in full: python3 ~/.claude/hooks/recall.py open <id>"  # F67.c: exact text, a literal <id>
-CUES = ["what did i say", "what did we decide", "we decided", "i told you", "i said", "you said", "earlier", "before",
-        "last time", "previously", "remember", "as we discussed", "did we", "did i", "which one did", "what was the"]
+CUES = ["what did i say", "what did you say", "what did we decide", "did we decide", "did we agree", "did i say",
+        "did i tell you", "we decided", "we agreed", "i told you", "i said", "you said", "you mentioned", "i mentioned",
+        "last time", "previously", "as we discussed", "as discussed", "which one did", "earlier you", "earlier i",
+        "earlier we", "said earlier", "said before", "as before", "like before", "same as before", "do you remember",
+        "remember when", "remember what"]  # F67.b as amended 2026-11-22
+BARE = ["run the tests before you commit postgres billing", "an earlier version of the postgres billing database",
+        "remember to check the postgres billing database", "did i forget the postgres billing database",
+        "did we ship the postgres billing database", "what was the postgres billing database",
+        "before postgres billing database", "earlier postgres billing database", "remember postgres billing database",
+        "did i postgres billing database", "did we postgres billing database"]
 
 
 def auto_entries(settings):
@@ -261,8 +269,20 @@ class Trigger(HookBase):
                 out = self.ctx("%s the postgres billing database" % cue)
                 self.assertTrue(out.startswith(HEADER), (cue, out[:200]))
 
+    def test_f67_b_bare_words_do_not_fire(self):
+        for prompt in BARE:
+            with self.subTest(prompt):
+                self.silent(prompt)
+        self.assertEqual(self.log_lines(), [], "no cue, so no health line")
+
+    def test_f67_b_cues_match_whole_words_only(self):
+        for prompt in ("unwe decided postgres billing database", "previouslyx postgres billing database",
+                       "we decidedly postgres billing database"):
+            with self.subTest(prompt):
+                self.silent(prompt)
+
     def test_f67_b_cues_are_case_insensitive(self):
-        for cue in ("WHAT DID I SAY", "Last Time", "REMEMBER"):
+        for cue in ("WHAT DID I SAY", "Last Time", "DO YOU REMEMBER"):
             with self.subTest(cue):
                 self.assertTrue(self.ctx("%s the postgres billing database" % cue).startswith(HEADER))
 
@@ -296,8 +316,8 @@ class Query(HookBase):
         self.assertTrue(out.startswith(HEADER), out[:200])
 
     def test_f67_c_cue_phrases_do_not_count_as_query_words(self):
-        # `previously` and `remember` are cues; only `postgres` is left
-        self.silent("previously remember postgres")
+        # `previously` and `as discussed` are cues; only `postgres` is left
+        self.silent("previously as discussed postgres")
 
     def test_f67_c_no_hits_prints_nothing(self):
         self.silent("what did i say about zebra giraffe antelope")
@@ -420,11 +440,30 @@ class Health(HookBase):
         self.assertIs(row["timed_out"], False)
         self.assertIsInstance(row["ts"], str)
 
+    def test_f67_d_cue_field_is_the_matched_cue_phrase(self):
+        for cue in ("what did we decide", "last time", "you mentioned", "do you remember"):
+            with self.subTest(cue):
+                n = len(self.log_lines())
+                self.ctx("%s the postgres billing database" % cue)
+                rows = self.log_lines()
+                self.assertEqual(len(rows), n + 1)
+                self.assertEqual(rows[-1]["cue"], cue)
+
+    def test_f67_d_cue_field_is_quote_for_a_quoted_phrase(self):
+        self.ctx('use "postgres billing database" please')
+        self.assertEqual(self.log_lines()[-1]["cue"], "quote")
+
+    def test_f67_d_cue_field_holds_no_prompt_text(self):
+        self.ctx("what did i say about the postgres billing database ZQCUE")
+        row = self.log_lines()[-1]
+        self.assertEqual(row["cue"], "what did i say")
+        self.assertNotIn("ZQCUE", json.dumps(row))
+
     def test_f67_d_log_holds_no_prompt_text_and_no_snippets(self):
         self.ctx("what did i say about the postgres billing database")
         with open(os.path.join(self.hd, "auto-recall.jsonl")) as f:
             text = f.read()
-        for word in ("postgres", "billing", "BILLINGMARK", "kubernetes", "what did i say"):
+        for word in ("postgres", "billing", "BILLINGMARK", "kubernetes", "about the"):
             self.assertNotIn(word, text)
 
     def test_f67_d_a_run_without_hits_logs_zero_hits(self):
@@ -440,7 +479,7 @@ class Health(HookBase):
 
     def test_f67_d_two_runs_append_two_lines(self):
         self.ctx("what did i say about the postgres billing database")
-        self.ctx("did we pick the kubernetes staging deployment")
+        self.ctx("did we decide the kubernetes staging deployment")
         self.assertEqual(len(self.log_lines()), 2)
 
 
