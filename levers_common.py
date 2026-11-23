@@ -9,7 +9,8 @@ from test_content import git
 from test_f44_recall import key_for
 
 RULE_SENTENCE = ("- recall rule: before you state an earlier number, path, name, command or decision, search for it. "
-                 "Do not answer from memory. If the search finds nothing, say so.")
+                 "Do not answer from memory. If a value is not in your context, or a file no longer holds it, search "
+                 "before you answer \"unknown\". If the search finds nothing, say so.")
 MCP_SUFFIX = " Or call the search_earlier_chat tool."
 OPTIONAL = ("recall-mcp.py", "reanchor.py", "claim-guard.py")
 RULE_A = "- D1 [2026-10-01] [rule] RULEAAA never put tool names in commit messages | why: user said so"
