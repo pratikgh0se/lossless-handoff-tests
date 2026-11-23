@@ -301,11 +301,50 @@ class Evidence(unittest.TestCase):
         found = set(self.MARKER.findall(read("docs/evidence.md")))
         self.assertEqual(found, {"[C%d]" % i for i in range(1, 9)})
 
-    def test_f66_c_readme_says_no_scored_result_and_points_to_the_evidence_file(self):
+    def benchmarks_section(self):
+        lines = read("README.md").split("\n")
+        for i, l in enumerate(lines):
+            if re.match(r"^#{1,6}\s+Benchmarks?\b", l):
+                j = i + 1
+                while j < len(lines) and not re.match(r"^#{1,6}\s", lines[j]):
+                    j += 1
+                return "\n".join(lines[i + 1:j])
+        return None
+
+    def test_f66_c_readme_points_to_the_evidence_file_and_says_live_checks_include_failures(self):
         text = read("README.md")
-        self.assertRegex(text, r"(?i)no scored benchmark result")
         self.assertIn("docs/evidence.md", text)
         self.assertRegex(text, r"(?i)currently (fail|include failures)")
+
+    def test_f66_c_a_scored_benchmark_result_comes_with_a_report_a_register_entry_and_limits(self):
+        # F66.c (PR #54): the README publishes a scored benchmark result only together with a link to its committed report
+        # under docs/proof/benchmarks/, a register entry in hooks/claims.json for it, and a list of its limits that
+        # includes the seed count. With no scored result, the README says that none is published yet.
+        text = read("README.md")
+        sec = self.benchmarks_section()
+        scored = bool(sec and re.search(r"(?m)^\|.*\d+(\.\d+)?%", sec))
+        if not scored:
+            self.assertRegex(text, r"(?i)no scored benchmark result")
+            return
+        links = re.findall(r"\]\((docs/proof/benchmarks/[^)\s]+\.md)\)", text)
+        self.assertTrue(links, "a scored result needs a link to a committed report under docs/proof/benchmarks/")
+        for rel in links:
+            self.assertTrue(os.path.isfile(os.path.join(REPO, rel)), "linked report is missing: " + rel)
+        import json as _json
+        with open(os.path.join(helpers.HOOKS_DIR, "claims.json")) as f:
+            claims = _json.load(f)["claims"]
+        extra = [c for c in claims if c["id"] not in {"C%d" % i for i in range(1, 9)}]
+        self.assertTrue(extra, "a scored result needs a register entry in hooks/claims.json")
+        self.assertTrue(any(os.path.basename(rel) in _json.dumps(c) for c in extra for rel in links),
+                        "no register entry points at the committed report")
+        m = re.search(r"(?im)^\s*(?:\*\*)?limits(?:\*\*)?:?\s*$", sec)
+        self.assertTrue(m, "the Benchmarks section needs a list of limits")
+        limits = sec[m.end():]
+        self.assertRegex(limits, r"(?i)\b\d+\s+seeds?\b", "the limits must include the seed count")
+
+    def test_f66_c_the_committed_benchmark_reports_exist_in_the_tree(self):
+        for rel in re.findall(r"\]\((docs/proof/benchmarks/[^)\s]+)\)", read("README.md")):
+            self.assertTrue(os.path.isfile(os.path.join(REPO, rel)), rel)
 
     def lint(self, *args, cwd=None):
         import tempfile, shutil

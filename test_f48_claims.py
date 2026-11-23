@@ -134,9 +134,16 @@ class Lint(ClaimsBase):
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "claims ok (2 cited)"), r.stderr)
 
     def test_ac198_unknown_claim(self):
-        r = self.lint("A claim [C9] that does not exist.\n")
+        # the register grows (C9 exists now): pick an id that is surely not in hooks/claims.json at test time
+        with open(os.path.join(HOOKS_DIR, "claims.json")) as f:
+            known = {c["id"] for c in json.load(f)["claims"]}
+        n = 9999
+        while "C%d" % n in known:
+            n += 1
+        bad = "C%d" % n
+        r = self.lint("A claim [%s] that does not exist.\n" % bad)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("unknown claim C9", r.stdout)
+        self.assertIn("unknown claim %s" % bad, r.stdout)
 
     def test_ac198_failing_claim_named_with_value(self):
         r = self.lint("Every compaction gets a handoff [C2].\n")
