@@ -29,11 +29,11 @@ class Versions(unittest.TestCase):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.20\.0["']""", n)
+                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.0["']""", n)
 
     def test_default_install_does_not_add_auto_recall_or_recall_mcp(self):
         home, _ = installed_home()
-        for n in ("auto-recall.py", "recall-mcp.py", ".recall-rules"):
+        for n in ("auto-recall.py", "recall-mcp.py"):  # F81.a: .recall-rules is part of the default install
             self.assertFalse(os.path.exists(os.path.join(home, ".claude", "hooks", n)), n)
 
 

@@ -97,7 +97,7 @@ class LeverInstall:
         self.assertTrue(os.path.exists(self.p(H + self.file)))
         if not self.file.startswith("."):
             self.assertIn(H + self.file, extra)
-        for other in ("recall-mcp.py", "reanchor.py", "claim-guard.py", ".recall-rules", "auto-recall.py"):
+        for other in ("recall-mcp.py", "reanchor.py", "claim-guard.py", "auto-recall.py"):  # F81.a: .recall-rules is a default
             if other != self.file:
                 self.assertNotIn(H + other, extra, other)
                 self.assertFalse(os.path.exists(self.p(H + other)), other)
@@ -393,7 +393,7 @@ class Versions(unittest.TestCase):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.20\.0["']""", n)
+                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.0["']""", n)
 
     def test_levers_are_in_the_manifest_when_installed(self):
         home, _ = installed_home("--reanchor", "--claim-guard")

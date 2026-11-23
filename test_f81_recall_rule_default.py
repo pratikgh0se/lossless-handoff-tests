@@ -127,8 +127,8 @@ class Line(RulesBase):
 
     def test_f81_b_the_subagent_start_output_has_the_line_with_the_marker_only(self):
         self.marker()
-        self.assertIn(LINE, self.sub())
-        self.assertNotIn("- recall rule:", self.sub(extra={"HANDOFF_RECALL_RULES": "0"}))
+        self.assertIn(LINE, additional_context(self.sub()))
+        self.assertNotIn("- recall rule:", additional_context(self.sub(extra={"HANDOFF_RECALL_RULES": "0"})))
         self.marker(False)
         self.assertNotIn("- recall rule:", self.sub())
 

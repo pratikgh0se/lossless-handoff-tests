@@ -102,8 +102,8 @@ class Marker(Base):
 
     def test_f68_other_env_values_keep_the_rule_on(self):
         self.marker()
-        self.assertIn(RULE_SENTENCE, self.part1(extra={"HANDOFF_RECALL_RULES": "1"}))
-        self.assertIn(RULE_SENTENCE, self.sub(extra={"HANDOFF_RECALL_RULES": ""}))
+        self.assertIn(RULE_SENTENCE, additional_context(self.part1(extra={"HANDOFF_RECALL_RULES": "1"})))
+        self.assertIn(RULE_SENTENCE, additional_context(self.sub(extra={"HANDOFF_RECALL_RULES": ""})))
 
     def test_f68_marker_without_a_recall_line_adds_nothing(self):
         # no recall.py next to the hook: there is no recall line, so there is nothing to follow
