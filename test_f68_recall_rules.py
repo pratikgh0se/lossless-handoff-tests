@@ -80,7 +80,8 @@ class Marker(Base):
 
     def test_f68_the_exact_text(self):
         self.assertEqual(RULE_SENTENCE, "- recall rule: before you state an earlier number, path, name, command or "
-                         "decision, search for it. Do not answer from memory. If the search finds nothing, say so.")
+                         "decision, search for it. Do not answer from memory. If a value is not in your context, or a file "
+                         "no longer holds it, search before you answer \"unknown\". If the search finds nothing, say so.")
         self.marker()
         self.assertIn(RULE_SENTENCE, additional_context(self.part1()))
 

@@ -1,5 +1,5 @@
-"""Install, uninstall, dry-run, saved defaults and the kept line for the four levers of 0.18.0 (F68-F71), plus the
-versions (0.18.0 / 1.20.0). Code-blind: written from contract-0.16.md. Every lever is opt-in and follows the F64 rules.
+"""Install, uninstall, dry-run, saved defaults and the kept line for the four levers of 0.19.0 (F68-F71), plus the
+versions (0.19.0 / 1.21.0). Code-blind: written from contract-0.16.md. Every lever is opt-in and follows the F64 rules.
 `claude mcp add` is tested with a fake `claude` on PATH that records its arguments, and with no `claude` on PATH."""
 import json, os, re, shutil, stat, tempfile, unittest
 
@@ -188,7 +188,68 @@ class LeverInstall:
 
 
 class RecallRules(LeverInstall, InstBase):
+    """F81.a (0.19.0): the marker is part of the default install, so the opt-in rules of the mixin are replaced here."""
     flag, key, name, file = "--recall-rules", "recall_rules", "recall-rules", ".recall-rules"
+
+    def test_default_install_has_no_lever(self):
+        home, _ = installed_home()
+        self.assertTrue(os.path.isfile(os.path.join(home, H + self.file)), "F81.a: the default install writes the marker")
+        self.assertEqual(entries(read_settings(home), "recall-rules"), [])
+
+    def test_flag_adds_only_its_own_part(self):
+        base, _ = installed_home()
+        self.run_i(self.flag)
+        extra = {x for x in tree(self.home) - tree(base) if x.startswith(".claude/")}
+        self.assertTrue(os.path.exists(self.p(H + self.file)))
+        for other in ("recall-mcp.py", "reanchor.py", "claim-guard.py", "auto-recall.py"):
+            self.assertNotIn(H + other, extra, other)
+            self.assertFalse(os.path.exists(self.p(H + other)), other)
+
+    def test_flag_lists_in_dry_run_only_when_given(self):
+        r = run_install(self.home, "--dry-run", path=self.path)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        plan = "\n".join(l for l in (r.stdout + r.stderr).split("\n") if "not selected" not in l)
+        self.assertIn(self.file, plan, "F81.a: --dry-run lists the marker")
+        r = run_install(self.home, "--dry-run", "--no-recall-rules", path=self.path)
+        plan = "\n".join(l for l in (r.stdout + r.stderr).split("\n") if "not selected" not in l)
+        self.assertNotIn(self.file, plan)
+        self.assertEqual(sorted(x for x in os.listdir(self.home) if x != "Library"), [])
+
+    def test_save_defaults_writes_the_key_and_a_plain_run_applies_it(self):
+        self.run_i("--no-recall-rules", "--save-defaults")
+        self.assertIn("recall_rules=0", self.lines_of_defaults())
+        home2 = os.path.join(self.tmp, "home2")
+        os.makedirs(os.path.join(home2, ".config", "lossless-handoff"))
+        shutil.copy(self.defaults(), self.defaults(home2))
+        r = run_install(home2, path=self.path)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(home2, H + self.file)), "a saved recall_rules=0 skips the marker")
+
+    def test_no_flag_turns_a_saved_default_off_for_one_run(self):
+        home2 = os.path.join(self.tmp, "home2")
+        os.makedirs(home2)
+        r = run_install(home2, "--no-recall-rules", path=self.path)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(home2, H + self.file)))
+
+    def test_save_defaults_with_no_flag_removes_the_line_and_keeps_the_part(self):
+        # F81.a: --no-recall-rules together with --save-defaults saves recall_rules=0 and removes the marker
+        self.run_i()
+        self.assertTrue(os.path.exists(self.p(H + self.file)))
+        r = self.run_i("--no-recall-rules", "--save-defaults")
+        self.assertIn("recall-rules: removed", r.stdout + r.stderr)
+        self.assertIn("recall_rules=0", self.lines_of_defaults())
+        self.assertFalse(os.path.exists(self.p(H + self.file)))
+
+    def test_without_save_defaults_no_line_is_written(self):
+        self.run_i("--no-recall-rules")
+        if os.path.exists(self.defaults()):
+            self.assertNotIn("recall_rules=0", self.lines_of_defaults())
+            self.assertNotIn("recall_rules=1", self.lines_of_defaults())
+
+    def test_no_kept_line_without_an_install(self):
+        r = self.run_i()
+        self.assertNotIn("%s: already installed" % self.name, r.stdout + r.stderr)
 
     def test_marker_file_is_empty_or_text_and_not_a_hook(self):
         self.run_i(self.flag)
@@ -309,24 +370,24 @@ class AllTogether(InstBase):
 
 
 class Versions(unittest.TestCase):
-    def test_install_sh_version_is_0_18_0(self):
+    def test_install_sh_version_is_0_19_0(self):
         home = os.path.realpath(tempfile.mkdtemp(prefix="lev-v-"))
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--version")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.18.0", r.stdout + r.stderr)
+        self.assertIn("0.19.0", r.stdout + r.stderr)
 
-    def test_installed_manifest_version_is_1_20_0(self):
+    def test_installed_manifest_version_is_1_21_0(self):
         home, _ = installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.20.0")
+            self.assertEqual(json.load(f)["version"], "1.21.0")
 
-    def test_changelog_has_0_18_0_first(self):
+    def test_changelog_has_0_19_0_first(self):
         with open(os.path.join(REPO, "CHANGELOG.md")) as f:
             heads = re.findall(r"(?m)^## \[([0-9.]+)\]", f.read())
-        self.assertEqual(heads[0], "0.18.0")
+        self.assertEqual(heads[0], "0.19.0")
 
-    def test_hook_version_constants_are_1_20_0_in_every_hook_that_has_one(self):
+    def test_hook_version_constants_are_1_21_0_in_every_hook_that_has_one(self):
         for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py", "recall-mcp.py", "reanchor.py",
                   "claim-guard.py"):
             p = os.path.join(HOOKS_DIR, n)

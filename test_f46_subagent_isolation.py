@@ -330,8 +330,8 @@ class VersionInHealth(F46Base):
         self.write_transcript([user(PARENT_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.20.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.20.0")
+        self.assertEqual(self.health()["hook_version"], "1.21.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.21.0")
 
 
 if __name__ == "__main__":
