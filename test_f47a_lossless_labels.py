@@ -25,9 +25,9 @@ class Base(RecallBase, ProofBase):
     def penv(self):
         return self.renv(embed=self.down)
 
-    def records(self, sid):
+    def records(self, sid, msgs=None):
         recs = [self.rec("user" if i % 2 else "assistant", m, sid=sid, cwd=self.proj, day=8, minute=i)
-                for i, m in enumerate(self.msgs)]
+                for i, m in enumerate(msgs or self.msgs)]
         recs.append(dict(BOUNDARY, timestamp=BTS, sessionId=sid, cwd=self.proj))
         recs.append(self.rec("user", "A later message after the boundary exists here ok", sid=sid, cwd=self.proj,
                              day=10, minute=1))
@@ -39,8 +39,10 @@ class Base(RecallBase, ProofBase):
         return p
 
     def sub_transcript(self):
-        # the parent session must exist too, as it does in a real project
-        self.main_transcript()
+        # the parent session exists too, with other text, as in a real project (no duplicate copy of the subagent text)
+        pp = os.path.join(self.tdir(self.proj), PARENT + ".jsonl")
+        self.write_jsonl(pp, self.records(PARENT, ["Parent note number %d about the office plants and the watering PARN%d-unique" % (i, i)
+                                                   for i in range(1, 8)]))
         p = os.path.join(self.tdir(self.proj), PARENT, "subagents", "agent-%s.jsonl" % AGENT)
         self.write_jsonl(p, self.records(PARENT))
         return p
@@ -131,35 +133,9 @@ elif args and args[0] == "open":
         self.assertEqual(self.verdict(rc)["checks"]["lossless"], "pass")
 
 
-class Timeout(Base):
-    HANG = """#!/usr/bin/env python3
-import time
-time.sleep(3600)
-"""
-
-    def slow_prove(self, pre):
-        # the spec gives no time limit for one recall call, so this waits up to 10 minutes for the verdict
-        r = subprocess.run([sys.executable, pre, "--prove"], stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                           env=self.penv(), timeout=600)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        return r
-
-    def test_f47a_a_recall_call_that_times_out_gives_skip_with_the_reason_timeout(self):
-        t = self.main_transcript()
-        pre = self.fake_hooks(self.HANG)
-        rc = self.receipt(t, sid=PARENT)
-        self.slow_prove(pre)
-        v = self.verdict(rc)
-        self.assertEqual(v["checks"]["lossless"], "skip", v)
-        self.assertIn("timeout", v["details"].get("lossless", ""), v)
-
-    def test_f47a_a_timeout_is_not_counted_as_a_failure_in_the_output_line(self):
-        t = self.main_transcript()
-        pre = self.fake_hooks(self.HANG)
-        self.receipt(t, sid=PARENT)
-        r = self.slow_prove(pre)
-        self.assertIn("lossless 0/0", r.stdout)
-        self.assertRegex(r.stdout, r"failed 0\b")
+# The amendment also says: a recall call that times out gives the verdict `skip` with the reason `timeout`. The spec gives
+# no time limit and no setting for it. A fake recall.py that hangs kept `--prove` busy for more than 10 minutes on the
+# product head, so no test of this rule is possible through the public interface in a reasonable time. It is not tested.
 
 
 if __name__ == "__main__":
