@@ -6,7 +6,7 @@ Setup: the fake HOME has a "live" hooks folder with decoy files that leave a tra
 import json, os, shutil, subprocess, sys, unittest
 
 from helpers import copy_hook_scripts
-from levers_common import Lab, OPTIONAL, RULE_SENTENCE, MCP_SUFFIX, RULE_A, DEC_B, Mcp, additional_context, usage_entry, write_transcript
+from levers_common import Lab, OPTIONAL, RULE_SENTENCE, MCP_SUFFIX, register_mcp, TOOL, RULE_A, DEC_B, Mcp, additional_context, usage_entry, write_transcript
 from test_f67_auto_recall import HookBase, HEADER, HIT_RE
 
 DECOY_RECALL = ('import os\nopen(os.path.join(os.environ["HOME"], "decoy-trace"), "a").write("recall\\n")\n')
@@ -91,21 +91,22 @@ class PostcompactInject(Base):
                 lines = self.part1(p, p, source)
                 self.assertEqual(len(self.rec(lines)), 1, "the recall line comes from the private recall.py")
                 self.assertNotIn(RULE_SENTENCE, lines)
-                self.assertFalse(self.rec(lines)[0].endswith(MCP_SUFFIX))
+                self.assertNotIn(TOOL, self.rec(lines)[0])
         lines = self.sub(p, p)
         self.assertEqual(len(self.rec(lines)), 1)
         self.assertNotIn(RULE_SENTENCE, lines)
-        self.assertFalse(self.rec(lines)[0].endswith(MCP_SUFFIX))
+        self.assertNotIn(TOOL, self.rec(lines)[0])
         self.assertFalse(self.traced(), "the decoy recall.py of ~/.claude/hooks was used")
 
     def test_f72_override_reads_the_private_marker_and_mcp_file(self):
         self.decoys(marker=False)
         os.remove(os.path.join(self.hooks, "recall-mcp.py"))
         p = self.private(with_marker=True, with_mcp=True)
+        register_mcp(self.home)  # F83.e: the tool is named when the server is registered for the user
         for lines in (self.part1(p, p), self.sub(p, p)):
             i = [k for k, l in enumerate(lines) if l.startswith("- recall:")][0]
-            self.assertTrue(lines[i].endswith(MCP_SUFFIX))
-            self.assertEqual(lines[i + 1], RULE_SENTENCE)
+            self.assertIn(TOOL, lines[i])
+            self.assertEqual(lines[i + 1], RULE_SENTENCE + MCP_SUFFIX)
         self.assertFalse(self.traced())
 
     def test_f72_a_copy_next_to_the_hook_file_is_not_used(self):
@@ -116,7 +117,7 @@ class PostcompactInject(Base):
         other = self.private()
         for lines in (self.part1(script_dir, other), self.sub(script_dir, other)):
             self.assertNotIn(RULE_SENTENCE, lines)
-            self.assertFalse(any(l.endswith(MCP_SUFFIX) for l in self.rec(lines)))
+            self.assertFalse(any(TOOL in l for l in self.rec(lines)))
 
     def test_f72_a_missing_file_in_the_override_folder_means_the_part_is_absent(self):
         self.decoys(marker=True)  # live has recall.py (decoy), marker and recall-mcp.py
@@ -129,12 +130,13 @@ class PostcompactInject(Base):
     def test_f72_unset_empty_or_missing_falls_back_to_the_home_folder(self):
         self.decoys(recall=False, marker=True)  # live: marker + recall-mcp.py + the real recall.py
         script_dir = self.private()  # a bare copy: no marker, no mcp file
+        register_mcp(self.home)
         for ov in EMPTY_FALLBACKS:
             with self.subTest(ov):
                 for lines in (self.part1(script_dir, ov), self.sub(script_dir, ov)):
                     i = [k for k, l in enumerate(lines) if l.startswith("- recall:")][0]
-                    self.assertTrue(lines[i].endswith(MCP_SUFFIX), "recall-mcp.py of ~/.claude/hooks")
-                    self.assertEqual(lines[i + 1], RULE_SENTENCE, "marker of ~/.claude/hooks")
+                    self.assertIn(TOOL, lines[i], "server registered in the user config")
+                    self.assertEqual(lines[i + 1], RULE_SENTENCE + MCP_SUFFIX, "marker of ~/.claude/hooks")
 
     def test_f72_a_regular_file_is_not_a_folder_and_falls_back(self):
         self.decoys(recall=False, marker=True)

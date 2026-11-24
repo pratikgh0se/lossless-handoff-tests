@@ -15,9 +15,10 @@ from test_f68_recall_rules import Base as RulesBase
 
 H = ".claude/hooks/"
 MARKER = ".recall-rules"
-LINE = ("- recall rule: before you state an earlier number, path, name, command or decision, search for it. Do not answer "
-        "from memory. If a value is not in your context, or a file no longer holds it, search before you answer "
-        "\"unknown\". If the search finds nothing, say so.")
+LINE = (
+    "- recall rule: if your context does not clearly show an earlier number, path, name, command or decision, run "
+    "the recall command above before you answer. Copy it exactly: full path, no cd. A failed or denied command is "
+    "not \"not found\": run the exact command again. If no search can run, say so.")
 
 
 class Install(InstBase):

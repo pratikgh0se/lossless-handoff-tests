@@ -3,10 +3,10 @@ With the marker file `<hooks dir>/.recall-rules` and `HANDOFF_RECALL_RULES` not 
 line (SessionStart compact, startup and resume output, and the SubagentStart output) adds one exact line directly
 after the recall line. No marker, or `HANDOFF_RECALL_RULES=0`: output is byte-identical to 0.15.0. The inject row in
 `receipts.jsonl` gets `"recall_rules": true|false`.
-Also F69.f: when `recall-mcp.py` is installed the recall line ends with ` Or call the search_earlier_chat tool.`"""
+Also F83.e: when the recall MCP server is registered for the user, the rule line ends with the tool sentence."""
 import json, os, unittest
 
-from levers_common import (Lab, RULE_SENTENCE, MCP_SUFFIX, RULE_A, DEC_B, BOUNDARY, additional_context,
+from levers_common import (Lab, RULE_SENTENCE, MCP_SUFFIX, register_mcp, TOOL, RULE_A, DEC_B, BOUNDARY, additional_context,
                            write_transcript)
 from test_f44_recall import RECALL_LINE
 
@@ -79,9 +79,10 @@ class Marker(Base):
                 self.assertEqual(new, base[:i + 1] + [RULE_SENTENCE] + base[i + 1:])
 
     def test_f68_the_exact_text(self):
-        self.assertEqual(RULE_SENTENCE, "- recall rule: before you state an earlier number, path, name, command or "
-                         "decision, search for it. Do not answer from memory. If a value is not in your context, or a file "
-                         "no longer holds it, search before you answer \"unknown\". If the search finds nothing, say so.")
+        self.assertEqual(RULE_SENTENCE, "- recall rule: if your context does not clearly show an earlier number, path, "
+                         "name, command or decision, run the recall command above before you answer. Copy it exactly: "
+                         "full path, no cd. A failed or denied command is not \"not found\": run the exact command again. "
+                         "If no search can run, say so.")
         self.marker()
         self.assertIn(RULE_SENTENCE, additional_context(self.part1()))
 
@@ -154,28 +155,59 @@ class Receipts(Base):
 
 
 class McpSuffix(Base):
-    """F69.f: with recall-mcp installed the recall line names the tool, at the end of the recall line."""
+    """F83.e: the tool is named only when the recall MCP server is registered for the user, not when the file exists."""
     keep = ("recall-mcp.py",)
 
-    def test_f69_f_recall_line_ends_with_the_tool_sentence_when_the_server_is_installed(self):
+    def test_f83_e_registered_server_adds_the_tool_sentence_to_the_rule_line(self):
+        self.marker()
+        register_mcp(self.home)
         for name, run in (("part1", lambda: self.part1()), ("sub", lambda: self.sub())):
             with self.subTest(name):
                 lines = self.lines_of(run())
-                line = lines[self.recall_index(lines)]
-                self.assertTrue(line.endswith(MCP_SUFFIX), line[-120:])
-                self.assertTrue(line.startswith(RECALL_LINE[:60]))
+                i = self.recall_index(lines)
+                self.assertEqual(lines[i + 1], RULE_SENTENCE + MCP_SUFFIX)
+                self.assertTrue(lines[i + 1].endswith(" If Bash is not allowed, call search_earlier_chat."))
+                self.assertIn(TOOL, lines[i])
+                self.assertTrue(lines[i].startswith(RECALL_LINE[:60]))
 
-    def test_f69_f_the_f68_line_still_follows_the_recall_line(self):
+    def test_f83_e_the_file_alone_does_not_name_the_tool(self):
         self.marker()
+        self.assertTrue(os.path.exists(os.path.join(self.hooks, "recall-mcp.py")))
+        for name, run in (("part1", lambda: self.part1()), ("sub", lambda: self.sub())):
+            with self.subTest(name):
+                lines = self.lines_of(run())
+                i = self.recall_index(lines)
+                self.assertEqual(lines[i + 1], RULE_SENTENCE)
+                self.assertNotIn(TOOL, "\n".join(lines))
+
+    def test_f83_e_another_registered_server_does_not_count(self):
+        self.marker()
+        register_mcp(self.home, name="some-other-server")
+        self.assertNotIn(TOOL, additional_context(self.part1()))
+        self.assertNotIn(TOOL, additional_context(self.sub()))
+
+    def test_f83_e_a_broken_user_config_means_not_registered(self):
+        self.marker()
+        with open(os.path.join(self.home, ".claude.json"), "w") as f:
+            f.write("{ not json")
+        out = self.part1()
+        self.assertNotIn(TOOL, additional_context(out))
+        self.assertIn(RULE_SENTENCE, additional_context(out))
+
+    def test_f83_e_registered_server_without_the_marker_names_the_tool_in_the_recall_line_only(self):
+        self.marker(False)
+        register_mcp(self.home)
         lines = self.lines_of(self.part1())
         i = self.recall_index(lines)
-        self.assertTrue(lines[i].endswith(MCP_SUFFIX))
-        self.assertEqual(lines[i + 1], RULE_SENTENCE)
+        self.assertIn(TOOL, lines[i])
+        self.assertNotIn("recall rule:", "\n".join(lines))
+        self.assertNotIn(MCP_SUFFIX, "\n".join(lines))
 
-    def test_f69_f_without_the_server_file_the_line_does_not_name_the_tool(self):
-        os.remove(os.path.join(self.hooks, "recall-mcp.py"))
-        self.assertNotIn("search_earlier_chat", additional_context(self.part1()))
-        self.assertNotIn("search_earlier_chat", additional_context(self.sub()))
+    def test_f83_e_registered_server_with_the_off_switch_adds_no_rule_line(self):
+        self.marker()
+        register_mcp(self.home)
+        out = additional_context(self.part1(extra={"HANDOFF_RECALL_RULES": "0"}))
+        self.assertNotIn("recall rule:", out)
 
 
 if __name__ == "__main__":
