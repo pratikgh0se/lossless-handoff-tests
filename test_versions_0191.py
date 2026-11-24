@@ -29,7 +29,7 @@ class Versions(unittest.TestCase):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.0["']""", n)
+                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.1["']""", n)
 
     def test_default_install_does_not_add_auto_recall_or_recall_mcp(self):
         home, _ = installed_home()

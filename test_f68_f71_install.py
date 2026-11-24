@@ -393,7 +393,7 @@ class Versions(unittest.TestCase):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.0["']""", n)
+                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.1["']""", n)
 
     def test_levers_are_in_the_manifest_when_installed(self):
         home, _ = installed_home("--reanchor", "--claim-guard")
