@@ -217,16 +217,16 @@ class Docs(unittest.TestCase):
         hits = [p for p, t in self.doc_text().items() if ALLOW_RULE in t]
         self.assertTrue(hits, "no doc names %s" % ALLOW_RULE)
 
-    def test_f83_f_the_docs_say_the_rule_is_optional_and_for_ask_mode_and_headless_runs(self):
+    def test_f83_f_the_docs_say_the_rule_runs_recall_without_a_prompt_in_ask_mode_and_headless_runs(self):
         seen = []
         for p, t in self.doc_text().items():
             for m in re.finditer(re.escape(ALLOW_RULE), t):
                 near = t[max(0, m.start() - 700):m.end() + 700].lower()
-                if "optional" in near and "ask" in near and ("headless" in near or "-p" in near):
+                if "prompt" in near and "ask" in near and ("headless" in near or "-p" in near):
                     return
                 seen.append(p)
         self.assertTrue(seen, "no doc names %s" % ALLOW_RULE)
-        self.fail("no doc says the allow rule is optional and for ask mode and headless runs: %s" % sorted(set(seen)))
+        self.fail("no doc says the allow rule runs the recall command without a prompt in ask mode and headless runs: %s" % sorted(set(seen)))
 
 
 if __name__ == "__main__":
