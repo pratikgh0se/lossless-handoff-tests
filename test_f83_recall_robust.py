@@ -100,7 +100,7 @@ class ZeroSessions(Cli):
         self.assertEqual(os.path.realpath(m.group("root")), os.path.realpath(self.other))
         self.assertEqual(m.group("words"), "alpha beta")
         self.assertTrue(os.path.samefile(m.group("path"), self.recall), m.group("path"))
-        self.assertTrue(os.path.samefile(m.group("cwd"), self.proj) or os.path.isdir(m.group("cwd")), m.group("cwd"))
+        self.assertEqual(m.group("cwd"), "<project folder>")  # F83.b: the text `<project folder>` stays literal
 
     def test_f83_b_the_text_is_the_exact_wording(self):
         r = self.run_in(self.other, "search", "alpha")
