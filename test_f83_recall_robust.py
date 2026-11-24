@@ -38,7 +38,8 @@ class Cli(HistLab):
                               timeout=60)
 
     def found(self, r):
-        return WORD in r.stdout
+        # a hit line holds the message text; the zero-session line only repeats the query words
+        return "service for billing today" in r.stdout or "it is" in r.stdout and "Understood" in r.stdout
 
 
 class FolderFallback(Cli):
@@ -82,7 +83,7 @@ class FolderFallback(Cli):
     def test_f83_a_other_commands_use_the_fallback_too(self):
         r = self.run_in(self.hooks, "user", "--last", "20", oldpwd=self.proj)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn(WORD, r.stdout)
+        self.assertIn("service for billing today", r.stdout)
 
 
 class ZeroSessions(Cli):
