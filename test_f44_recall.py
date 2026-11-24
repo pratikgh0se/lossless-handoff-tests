@@ -10,7 +10,7 @@ from test_content import git
 
 RECALL = os.path.join(HOOKS_DIR, "recall.py")
 RECALL_LINE = ('- recall: earlier chats in this project are searchable word for word: python3 ~/.claude/hooks/recall.py '
-               'search "<words or regex>" (then: recall.py open <id>; recall.py user --last 20). Use it before acting on '
+               'search "<words or regex>" (same full path for: open <id>; user --last 20; do not cd). Use it before acting on '
                'anything vague here (exact commands, numbers, paths, names, the user\'s wording) and whenever the user '
                'refers to something said earlier; quote what you find instead of guessing. '
                'If recall and the decisions list disagree, the decisions list and the user\'s latest words win: recall shows '
@@ -846,8 +846,8 @@ class Hook(_f42.F42):
 
     def test_ac150_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.21.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.21.0")
+        self.assertEqual(self.health()["hook_version"], "1.21.1")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.21.1")
 
     # ---- AC 158
     def seed_transcript_for_index(self):

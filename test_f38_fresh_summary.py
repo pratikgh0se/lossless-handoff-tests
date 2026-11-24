@@ -482,7 +482,7 @@ class OverCap(F38):
     capped at 5,000 chars, so the agent size cannot be the knob. No git repo is used, hence `## Git` is absent; the
     'eight non-user facts sections' are then the seven that exist (logged in SPEC-GAPS.md).
     F39.6: cap 14,000 and summary cap 4,000, so the fixture is shrunk (agent AGENT chars) and the sweep ranges retuned."""
-    AGENT = 3000
+    AGENT = 2900
     HI = 9000
     LO_USERS, HI_USERS = 5000, 9000
 

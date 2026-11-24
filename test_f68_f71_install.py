@@ -370,30 +370,30 @@ class AllTogether(InstBase):
 
 
 class Versions(unittest.TestCase):
-    def test_install_sh_version_is_0_19_0(self):
+    def test_install_sh_version_is_0_19_1(self):
         home = os.path.realpath(tempfile.mkdtemp(prefix="lev-v-"))
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--version")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.19.0", r.stdout + r.stderr)
+        self.assertIn("0.19.1", r.stdout + r.stderr)
 
-    def test_installed_manifest_version_is_1_21_0(self):
+    def test_installed_manifest_version_is_1_21_1(self):
         home, _ = installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.21.0")
+            self.assertEqual(json.load(f)["version"], "1.21.1")
 
-    def test_changelog_has_0_19_0_first(self):
+    def test_changelog_has_0_19_1_first(self):
         with open(os.path.join(REPO, "CHANGELOG.md")) as f:
             heads = re.findall(r"(?m)^## \[([0-9.]+)\]", f.read())
-        self.assertEqual(heads[0], "0.19.0")
+        self.assertEqual(heads[0], "0.19.1")
 
-    def test_hook_version_constants_are_1_21_0_in_every_hook_that_has_one(self):
+    def test_hook_version_constants_are_1_21_1_in_every_hook_that_has_one(self):
         for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py", "recall-mcp.py", "reanchor.py",
                   "claim-guard.py"):
             p = os.path.join(HOOKS_DIR, n)
             self.assertTrue(os.path.isfile(p), n)
             with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.0["']""", n)
+                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.21\.1["']""", n)
 
     def test_levers_are_in_the_manifest_when_installed(self):
         home, _ = installed_home("--reanchor", "--claim-guard")

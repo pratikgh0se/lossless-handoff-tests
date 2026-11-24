@@ -8,16 +8,35 @@ from helpers import copy_hook_scripts, HOOKS_DIR
 from test_content import git
 from test_f44_recall import key_for
 
-RULE_SENTENCE = ("- recall rule: before you state an earlier number, path, name, command or decision, search for it. "
-                 "Do not answer from memory. If a value is not in your context, or a file no longer holds it, search "
-                 "before you answer \"unknown\". If the search finds nothing, say so.")
-MCP_SUFFIX = " Or call the search_earlier_chat tool."
+RULE_SENTENCE = (
+    "- recall rule: if your context does not clearly show an earlier number, path, name, command or decision, run "
+    "the recall command above before you answer. Copy it exactly: full path, no cd. A failed or denied command is "
+    "not \"not found\": run the exact command again. If no search can run, say so.")
+# F83.e: the end of the rule line when the recall MCP server is registered for the user
+MCP_SUFFIX = " If Bash is not allowed, call search_earlier_chat."
+MCP_NAME = "lossless-recall"
+TOOL = "search_earlier_chat"
+RECALL_TAIL = "(same full path for: open <id>; user --last 20; do not cd)"
 OPTIONAL = ("recall-mcp.py", "reanchor.py", "claim-guard.py")
 RULE_A = "- D1 [2026-10-01] [rule] RULEAAA never put tool names in commit messages | why: user said so"
 DEC_B = "- D2 [2026-10-02] [decision] DECBBB use sqlite for storage | why: simple"
 TASK_C = "- D4 [2026-10-04] [task] TASKDDD approve the release draft | why: one off"
 BOUNDARY = {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted",
             "timestamp": "2026-03-09T12:00:00.000Z", "compactMetadata": {"trigger": "auto", "preTokens": 100000}}
+
+
+def register_mcp(home, name=MCP_NAME):
+    """F83.e: register the recall MCP server in the user MCP configuration (`~/.claude.json`) of a temp HOME."""
+    p = os.path.join(home, ".claude.json")
+    try:
+        with open(p) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        d = {}
+    d.setdefault("mcpServers", {})[name] = {"type": "stdio", "command": "python3",
+                                            "args": [os.path.join(home, ".claude", "hooks", "recall-mcp.py")], "env": {}}
+    with open(p, "w") as f:
+        json.dump(d, f)
 
 
 class Lab(unittest.TestCase):
