@@ -2,7 +2,7 @@
 Receipts written by the SessionStart part 1 inject, and `precompact-handoff.py --prove`. Temp HOME, keyword-only recall."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import copy_hook_scripts, strip_node_tail, HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall, installed_settings, installed_plist
+from helpers import private_state, copy_hook_scripts, strip_node_tail, HOOKS_DIR, PRE, POST, PLAIN, user, asst, no_recall, installed_settings, installed_plist
 from test_f45_no_silent_miss import F45Base, BOUNDARY, RECOVERED_HEAD, CHECK_TAIL, iso
 from test_f44_recall import RecallBase, RECALL
 
@@ -435,6 +435,7 @@ class Alert(ProofBase):
                   open(os.path.join(self.hooks_home, ".handoff-manifest.json"), "w"))
 
     def check(self):
+        private_state(self.hd)
         r = subprocess.run([sys.executable, os.path.join(self.hooks_home, "postcompact-inject.py"), "--check"],
                            input="", capture_output=True, text=True, env=self.env(None), timeout=30)
         self.assertEqual(r.returncode, 0, r.stderr)

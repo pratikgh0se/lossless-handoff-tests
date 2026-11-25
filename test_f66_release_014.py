@@ -406,24 +406,24 @@ class Versions(unittest.TestCase):
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--version")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.20.1", r.stdout + r.stderr)
+        self.assertIn("0.20.2", r.stdout + r.stderr)
         self.assertEqual(sorted(os.listdir(home)), [])
 
     def test_f66_d_installed_manifest_version_is_1_22_1(self):
         home, _ = helpers.installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.22.1")
+            self.assertEqual(json.load(f)["version"], "1.22.2")
 
     def test_f66_d_changelog_has_0_20_1_first(self):
         heads = re.findall(r"(?m)^## \[([0-9.]+)\]", read("CHANGELOG.md"))
-        self.assertEqual(heads[0], "0.20.1")
+        self.assertEqual(heads[0], "0.20.2")
 
     def test_f66_d_hook_version_constants_are_1_22_1(self):
         # a constant in each entry file (the file has no other `HOOK_VERSION = ` assignment with a version)
         for n in ("precompact-handoff.py", "postcompact-inject.py"):
             with open(os.path.join(HOOKS_DIR, n)) as f:
                 src = f.read()
-            self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.1["']""", n)
+            self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.2["']""", n)
 
 
 if __name__ == "__main__":
