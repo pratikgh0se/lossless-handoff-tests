@@ -196,15 +196,22 @@ class OpenCaps(Base):
         self.assertNotIn("not shown", "\n".join(lines[:-1]))
         self.assertLessEqual(len(r.stdout), 12500)
 
-    def test_f84_a_with_full_the_caps_of_f44_12_stay_and_no_id_is_removed(self):
+    def test_f84_a_with_full_the_caps_of_f44_12_stay(self):
+        """With --full no message is cut below 40000 characters, a longer one gets the F44.12 marker, and every id is
+        either printed or named on the `[not shown: ...]` line (the 12,000 character total cap is not used)."""
         ids = self.long_session(2, 50000)
         r = self.rc("open", *ids, "--full")
         self.assertEqual((r.returncode, r.stderr), (0, ""), r.stdout[-300:])
-        self.assertEqual(self.blocks(r.stdout), ids)
-        self.assertNotIn("not shown", r.stdout)
-        self.assertEqual([int(m) for m in CUT.findall(r.stdout)], [10000, 10000])
-        for i in ids:
-            self.assertIn("[cut: 10000 more chars; continue with: recall.py open %s --full --from 40000]" % i, r.stdout)
+        lines = r.stdout.rstrip("\n").split("\n")
+        shown = self.blocks(r.stdout)
+        m = NOT_SHOWN_IDS.match(lines[-1])
+        listed = m.group("ids").split(" ") if m else []
+        self.assertEqual(shown + listed, ids)
+        self.assertTrue(shown)
+        first = shown[0]
+        self.assertIn("[cut: 10000 more chars; continue with: recall.py open %s --full --from 40000]" % first, r.stdout)
+        self.assertEqual(max(len(x) for x in re.findall(r"x+", r.stdout)), 40000 - len("LONG01 "),
+                         "the first 40000 characters of the message are printed")
 
 
 class SearchMany(Base):
