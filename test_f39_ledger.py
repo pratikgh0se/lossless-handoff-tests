@@ -48,7 +48,8 @@ def check_merge_prompt(tc, last):
     for piece in F42_PIECES:
         tc.assertIn(piece, last)
     tc.assertIn("Never RESOLVE a rule on your own judgement", last)
-    tc.assertTrue('| user: "' in last or '| user: \\"' in last, "the user quote form is in the prompt")
+    tc.assertIn('| user: "', last)
+    tc.assertNotIn('| user: \\"', last, "the quote in the prompt is a plain quote")
 # AMENDED by F42.2: ledger_resolved sits after ledger_superseded
 LEDGER_KEYS = ["ledger", "ledger_active", "ledger_superseded", "ledger_resolved", "ledger_restored", "ledger_chars", "ledger_error"]
 SUMMARY_PROMPT_BITS = ('prefixed "unverified:"', "under 3500 chars")

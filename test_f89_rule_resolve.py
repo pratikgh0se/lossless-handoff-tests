@@ -128,6 +128,12 @@ class Rule(F42):
         self.applied(lines, 2, "date passed")
         self.assertEqual(h["ledger_rule_resolved"], 1)
 
+    def test_f89_d_a_backslash_escaped_quote_is_read_with_the_backslashes_removed(self):
+        lines, h = self.run_merge(self.said(), 'RESOLVE D2: date passed | user: \\"%s\\"' % SAY)
+        self.applied(lines, 2, "date passed", SAY)
+        self.assertNotIn("\\", lines[1])
+        self.assertEqual(h["ledger_rule_resolved"], 1)
+
     def test_f89_f5_a_different_word_is_not_a_match(self):
         lines, h = self.run_merge(self.said("D2 has ended, the date is past"),
                                   'RESOLVE D2: date passed | user: "D2 has ended, the date is not past"')
@@ -167,7 +173,8 @@ class Rule(F42):
         self.go()
         last = self.merge_argv()[-1]
         self.assertIn("Never RESOLVE a rule on your own judgement", last)
-        self.assertTrue('| user: \\"' in last or '| user: "' in last, last[-700:])
+        self.assertIn('| user: "', last)
+        self.assertNotIn('| user: \\"', last, "the quote in the prompt is a plain quote")
         self.assertIn("NEW CONVERSATION", last)
         check_merge_prompt(self, last)
 
