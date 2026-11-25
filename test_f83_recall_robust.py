@@ -5,7 +5,7 @@ existing folder. F83.b: a `search` that covers 0 sessions prints the wrong-folde
 same as for any other search without a hit. F83.c: the recall line ends its first sentence with the new full-path text.
 F83.d: the rule line text. F83.e: the MCP tool is named only when the server is registered for the user.
 F83.f: the docs name one optional allow rule for ask mode and headless runs. F83.g: the version is in
-test_versions_0202.py."""
+test_versions_0210.py."""
 import glob, json, os, re, subprocess, sys, unittest
 
 from helpers import REPO, installed_home

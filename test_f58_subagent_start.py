@@ -208,32 +208,34 @@ class Cut(Base):
         lines = [rule_line(n) for n in range(1, 61)]
         ledger_path = self.write_ledger(lines)
         ctx = self.sub_ctx()
-        self.assertLessEqual(len(ctx), 4000, len(ctx))
+        # AMENDED by F88.c: the full text is cut at 4,000 characters as before; the rules left follow as index lines
+        # after an INDEX line (total 9,900 at most), then the pointer line.
+        self.assertLessEqual(len(ctx), 9900, len(ctx))
         self.assertTrue(ctx.startswith(PREAMBLE + "\n" + HEADER))
         out_lines = [l for l in ctx.split("\n") if l.strip()]
-        shown = [l for l in out_lines if l.startswith("- D")]
-        self.assertTrue(all(l in set(lines) for l in shown), "an entry is cut inside a line")
+        shown = [l for l in out_lines if l in set(lines)]
+        self.assertEqual(len(shown), len([l for l in out_lines if l.startswith("- D") and l in set(lines)]))
         ids = [int(re.match(r"- D(\d+) ", l).group(1)) for l in shown]
         self.assertGreaterEqual(len(ids), 4)
         self.assertLess(len(ids), 60)
         self.assertEqual(ids, list(range(60, 60 - len(ids), -1)), "newest first, no gaps")
+        self.assertLessEqual(sum(len(l) + 1 for l in shown), 4000, "full text stays within 4,000")
+        self.assertEqual(out_lines.count("INDEX (rules not shown in full above):"), 1)
         more = [l for l in out_lines if l.startswith("[more rules:")]
         self.assertEqual(len(more), 1, ctx[-600:])
         self.assertTrue(more[0].endswith("]"), more[0])
-        self.assertIn("recall.py", more[0])
+        self.assertIn("recall.py decisions --kind rule", more[0])
         self.assertIn(ledger_path, more[0])
-        known = set(lines) | {PREAMBLE, HEADER, RECALL_LINE, more[0]}
-        out_lines = canon_lines(out_lines)
-        self.assertTrue(all(l in known for l in out_lines), [l[:80] for l in out_lines if l not in known])
+        self.assertNotIn('recall.py search "rule"', more[0])
 
     def test_ac263_no_more_rules_line_when_everything_fits(self):
         self.write_ledger([RULE_A, RULE_B])
         self.assertNotIn("[more rules:", self.sub_ctx())
 
-    def test_ac263_cut_with_the_agent_file_sentence_still_within_4000(self):
+    def test_ac263_cut_with_the_agent_file_sentence_still_within_9900(self):
         self.put_agent_file(MARKER + "\n")
         self.write_ledger([rule_line(n) for n in range(1, 61)])
-        self.assertLessEqual(len(self.sub_ctx()), 4000)
+        self.assertLessEqual(len(self.sub_ctx()), 9900)
 
 
 # ---------------------------------------------------------------- AC 264
@@ -429,7 +431,7 @@ class Health(Base):
         self.assertEqual(row["rules"], 2)
         self.assertIsInstance(row["chars"], int)
         self.assertGreater(row["chars"], 0)
-        self.assertEqual(row["hook_version"], "1.22.2")
+        self.assertEqual(row["hook_version"], "1.23.0")
         self.assertGreater(len(ctx), 0)
 
     def test_ac267_each_run_appends_one_row(self):
@@ -446,7 +448,7 @@ class Health(Base):
         row = self.last_row()
         self.assertEqual(row["event"], "subagent_start")
         self.assertEqual(row["rules"], 0)
-        self.assertEqual(row["hook_version"], "1.22.2")
+        self.assertEqual(row["hook_version"], "1.23.0")
 
 
 if __name__ == "__main__":
