@@ -662,9 +662,8 @@ class NeverOld(F38):
             setup()
             self.go(**kw)
             keys = list(self.health().keys())
-            i = keys.index("fallback")
-            self.assertEqual(keys[i + 1], "summary_model", keys)
-            self.assertEqual(keys.count("summary_model"), 1)
+            self.assertIn("fallback", keys)  # G3 (F90.a): key set, not key order
+            self.assertEqual(keys.count("summary_model"), 1, keys)
 
     def test_ac92_summary_model_types(self):
         self.go()

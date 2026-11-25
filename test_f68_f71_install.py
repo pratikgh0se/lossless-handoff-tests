@@ -370,31 +370,7 @@ class AllTogether(InstBase):
 
 
 class Versions(unittest.TestCase):
-    def test_install_sh_version_is_0_20_1(self):
-        home = os.path.realpath(tempfile.mkdtemp(prefix="lev-v-"))
-        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
-        r = run_install(home, "--version")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.21.1", r.stdout + r.stderr)
-
-    def test_installed_manifest_version_is_1_22_1(self):
-        home, _ = installed_home()
-        with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.23.1")
-
-    def test_changelog_has_0_20_1_first(self):
-        with open(os.path.join(REPO, "CHANGELOG.md")) as f:
-            heads = re.findall(r"(?m)^## \[([0-9.]+)\]", f.read())
-        self.assertEqual(heads[0], "0.21.1")
-
-    def test_hook_version_constants_are_1_22_1_in_every_hook_that_has_one(self):
-        for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py", "recall-mcp.py", "reanchor.py",
-                  "claim-guard.py"):
-            p = os.path.join(HOOKS_DIR, n)
-            self.assertTrue(os.path.isfile(p), n)
-            with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.23\.1["']""", n)
-
+    # Version pins were removed (F90.h): `test_f90_version.py` checks the one VERSION file.
     def test_levers_are_in_the_manifest_when_installed(self):
         home, _ = installed_home("--reanchor", "--claim-guard")
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:

@@ -68,6 +68,34 @@ def private_state(hd):
 PACKAGE_DIR = os.path.join(HOOKS_DIR, "lossless_handoff")
 
 
+# ---- F90.h: one version source. Tests read the `VERSION` file in the repo root and never write a version number.
+VERSION_FILE = os.path.join(REPO, "VERSION")
+
+
+def read_versions():
+    """(product, hooks) from `VERSION` (2 lines: `product=<x.y.z>` and `hooks=<x.y.z>`). A tree from before F90 has no
+    such file: then the product version is the top CHANGELOG entry and the hooks version is the HOOK_VERSION constant
+    of guard_common.py, so the older tests still run on an older tree."""
+    if os.path.isfile(VERSION_FILE):
+        with open(VERSION_FILE) as f:
+            kv = dict(l.strip().split("=", 1) for l in f.read().split("\n") if "=" in l)
+        return kv.get("product", ""), kv.get("hooks", "")
+    prod = hooks = ""
+    try:
+        with open(os.path.join(REPO, "CHANGELOG.md")) as f:
+            m = re.search(r"(?m)^## \[([0-9]+\.[0-9]+\.[0-9]+)\]", f.read())
+        prod = m.group(1) if m else ""
+        with open(os.path.join(HOOKS_DIR, "guard_common.py")) as f:
+            m = re.search(r"""HOOK_VERSION\s*=\s*["']([0-9.]+)["']""", f.read())
+        hooks = m.group(1) if m else ""
+    except OSError:
+        pass
+    return prod, hooks
+
+
+PRODUCT_VERSION, HOOKS_VERSION = read_versions()
+
+
 def copy_hook_scripts(dest):
     """Copy the hook scripts (`hooks/*.py`) into `dest`. The PreCompact entry loads the code from the folder
     `hooks/lossless_handoff/` that sits next to it, so the folder is copied too when the tree under test has it

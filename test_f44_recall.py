@@ -5,7 +5,7 @@ closed port so they are deterministic. Secrets: placeholders only."""
 import hashlib, json, os, re, shutil, socket, sqlite3, subprocess, sys, tempfile, threading, time, unittest, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import test_f42_lossless_rules as _f42
-from helpers import HOOKS_DIR, PRE, POST, HookCase, AUTHORITY, installed_settings
+from helpers import HOOKS_DIR, PRE, POST, HookCase, AUTHORITY, installed_settings, HOOKS_VERSION
 from test_content import git
 
 RECALL = os.path.join(HOOKS_DIR, "recall.py")
@@ -846,8 +846,8 @@ class Hook(_f42.F42):
 
     def test_ac150_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.23.1")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.1")
+        self.assertEqual(self.health()["hook_version"], HOOKS_VERSION)
+        self.assertEqual(self.sidecar("S")["hook_version"], HOOKS_VERSION)
 
     # ---- AC 158
     def seed_transcript_for_index(self):

@@ -267,11 +267,10 @@ class OwnTimeout(F40):
     def test_ac124_field_order(self):
         self.go()
         keys = list(self.health().keys())
-        i = keys.index("ledger_chars")
-        self.assertEqual(keys[i + 1], "ledger_error", keys)
-        j = keys.index("summary_model")
-        self.assertEqual(keys[j + 1:j + 1 + len(LEDGER_KEYS)], LEDGER_KEYS)
-        self.assertEqual(keys[i + 2], "duration_ms", keys)
+        # G3 (F90.a): the contract is the key set, not the key order
+        for k in ("ledger_chars", "ledger_error", "duration_ms", "summary_model"):
+            self.assertIn(k, keys)
+        self.assertTrue(set(LEDGER_KEYS) <= set(keys), keys)
 
 
 # ---------------------------------------------------------------- AC 121
