@@ -1,7 +1,7 @@
 """F88 Decisions list at scale (0.21.0, hooks 1.23.0). Code-blind: written from the F88 text only.
 F88.a / f.1-f.5: `recall.py decisions`. F88.b-c / f.6-f.9: pointers, the subagent rule index, the ledger parts.
 F88.d / f.10-f.11: the room signal of `--check`. F88.e / f.12: the `clear` entry of the installer. F88.f.13: the pins are in
-test_versions_0210.py. Every child process gets a built environment (CLAUDE_CODE_SESSION_ID is set only where a test sets it)."""
+test_versions_0211.py. Every child process gets a built environment (CLAUDE_CODE_SESSION_ID is set only where a test sets it)."""
 import json, os, re, shutil, subprocess, sys, tempfile, unittest
 
 from helpers import run_install, run_uninstall

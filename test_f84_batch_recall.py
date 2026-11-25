@@ -362,7 +362,7 @@ class DocsAndVersion(unittest.TestCase):
 
     def test_f84_e_the_readme_version_line_names_0_20_1_and_hooks_1_22_1(self):
         t = self.read("README.md")
-        self.assertTrue([l for l in t.split("\n") if "0.21.0" in l and "1.23.0" in l], "no README line names both")
+        self.assertTrue([l for l in t.split("\n") if "0.21.1" in l and "1.23.1" in l], "no README line names both")
 
     def test_f84_d_the_recall_agent_file_says_one_call_takes_several_ids_or_patterns(self):
         home, _ = installed_home()

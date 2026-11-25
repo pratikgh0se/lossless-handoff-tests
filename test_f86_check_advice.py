@@ -1,7 +1,7 @@
 """F86 A check that gives correct advice (0.20.1, hooks 1.22.1). Code-blind: written from the F86 text only.
 F86.a: install problems end with the installer advice, data problems never do, both classes give the two-class line.
 F86.b: `--check --verbose` prints `ok:` / `problem:` lines, three `info:` lines and a last line. F86.c: the installer's last
-line. F86.d: docs and the README version line. F86.e.6: the pins are in test_versions_0210.py."""
+line. F86.d: docs and the README version line. F86.e.6: the pins are in test_versions_0211.py."""
 import glob, hashlib, json, os, re, subprocess, sys, tempfile, shutil, stat, time, unittest
 
 from helpers import private_state, REPO, HOOKS_DIR, copy_hook_scripts, installed_settings, installed_home, run_install
