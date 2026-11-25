@@ -16,7 +16,8 @@ RULE_SENTENCE = (
 MCP_SUFFIX = " If Bash is not allowed, call search_earlier_chat."
 MCP_NAME = "lossless-recall"
 TOOL = "search_earlier_chat"
-RECALL_TAIL = "(same full path for: open <id>; user --last 20; do not cd)"
+RECALL_TAIL = ("(same full path for: open <id> [<id> ...]; user --last 20. One call takes several patterns"
+               " or several ids. Do not use cd, a loop or a shell variable)")
 OPTIONAL = ("recall-mcp.py", "reanchor.py", "claim-guard.py")
 RULE_A = "- D1 [2026-10-01] [rule] RULEAAA never put tool names in commit messages | why: user said so"
 DEC_B = "- D2 [2026-10-02] [decision] DECBBB use sqlite for storage | why: simple"

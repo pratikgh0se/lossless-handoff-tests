@@ -68,7 +68,7 @@ class Handshake(Server):
         self.assertEqual(r["id"], 1)
         res = r["result"]
         self.assertEqual(res["serverInfo"]["name"], "lossless-recall")
-        self.assertEqual(res["serverInfo"]["version"], "1.21.2")
+        self.assertEqual(res["serverInfo"]["version"], "1.22.0")
         self.assertIn("tools", res["capabilities"])
         self.assertIsInstance(res["protocolVersion"], str)
 
@@ -80,6 +80,13 @@ class Handshake(Server):
         self.assertLess(len(ins), 4096)
         self.assertIn(RULE_SENTENCE.lstrip("- ").replace("recall rule: ", ""), ins)
         self.assertGreater(len(ins.split("\n")), 1, "one more line on when to use the tools")
+
+    def test_f84_d_instructions_use_the_new_recall_text(self):
+        r = self.start(init=False).call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                                       "clientInfo": {"name": "t", "version": "0"}})
+        ins = r["result"]["instructions"]
+        self.assertIn("One call takes several patterns or several ids. Do not use cd, a loop or a shell variable", ins)
+        self.assertNotIn("(same full path for: open <id>; user --last 20; do not cd)", ins)
 
     def test_f69_ping_and_initialized_notification(self):
         c = self.start()
