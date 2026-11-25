@@ -270,7 +270,7 @@ class OwnTimeout(F40):
         i = keys.index("ledger_chars")
         self.assertEqual(keys[i + 1], "ledger_error", keys)
         j = keys.index("summary_model")
-        self.assertEqual(keys[j + 1:j + 8], LEDGER_KEYS)
+        self.assertEqual(keys[j + 1:j + 1 + len(LEDGER_KEYS)], LEDGER_KEYS)
         self.assertEqual(keys[i + 2], "duration_ms", keys)
 
 

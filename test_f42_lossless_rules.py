@@ -698,7 +698,7 @@ class TemplateAndVersion(F42):
         self.go()
         keys = list(self.health().keys())
         i = keys.index("summary_model")
-        self.assertEqual(keys[i + 1:i + 8], LEDGER_KEYS, keys)
+        self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS, keys)
         self.assertEqual(keys[keys.index("ledger_superseded") + 1], "ledger_resolved")
         self.assertIs(type(self.health()["ledger_resolved"]), int)
 

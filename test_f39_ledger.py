@@ -51,7 +51,7 @@ def check_merge_prompt(tc, last):
     tc.assertIn('| user: "', last)
     tc.assertNotIn('| user: \\"', last, "the quote in the prompt is a plain quote")
 # AMENDED by F42.2: ledger_resolved sits after ledger_superseded
-LEDGER_KEYS = ["ledger", "ledger_active", "ledger_superseded", "ledger_resolved", "ledger_restored", "ledger_chars", "ledger_error"]
+LEDGER_KEYS = ["ledger", "ledger_active", "ledger_superseded", "ledger_resolved", "ledger_rule_resolved", "ledger_rule_resolve_rejected", "ledger_restored", "ledger_chars", "ledger_error"]  # F89 adds the two rule counters
 SUMMARY_PROMPT_BITS = ('prefixed "unverified:"', "under 3500 chars")
 STANDING = "STANDING DECISIONS (do not contradict"
 SUMMARY_TEXT = "SUMMARY-F39 " + "s" * 288
@@ -984,7 +984,7 @@ class Health(F39):
         self.go()
         keys = list(self.health().keys())
         i = keys.index("summary_model")
-        self.assertEqual(keys[i + 1:i + 8], LEDGER_KEYS, keys)
+        self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS, keys)
         h = self.health()
         self.assertIsInstance(h["ledger"], str)
         for k in ("ledger_active", "ledger_superseded", "ledger_restored"):
@@ -1010,7 +1010,7 @@ class Health(F39):
             self.assertEqual(h["ledger"], want)
             keys = list(h.keys())
             i = keys.index("summary_model")
-            self.assertEqual(keys[i + 1:i + 8], LEDGER_KEYS)
+            self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS)
         self.seed(SEED3)
         self.set_shim("merge", rc=1)
         self.go()
