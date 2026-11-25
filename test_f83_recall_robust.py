@@ -5,7 +5,7 @@ existing folder. F83.b: a `search` that covers 0 sessions prints the wrong-folde
 same as for any other search without a hit. F83.c: the recall line ends its first sentence with the new full-path text.
 F83.d: the rule line text. F83.e: the MCP tool is named only when the server is registered for the user.
 F83.f: the docs name one optional allow rule for ask mode and headless runs. F83.g: the version is in
-test_versions_0192.py."""
+test_versions_0200.py."""
 import glob, json, os, re, subprocess, sys, unittest
 
 from helpers import REPO, installed_home
@@ -15,6 +15,7 @@ from test_f44_recall import RECALL_LINE
 from test_f68_recall_rules import Base as RulesBase
 
 OLD_TAIL = "(then: recall.py open <id>; recall.py user --last 20)"
+F83_TAIL = "(same full path for: open <id>; user --last 20; do not cd)"
 ALLOW_RULE = "Bash(python3 ~/.claude/hooks/recall.py:*)"
 WORD = "zebrawidget"
 
@@ -153,14 +154,14 @@ class RecallLine(RulesBase):
                 line = lines[self.recall_index(lines)]
                 self.assertIn(RECALL_TAIL, line)
                 self.assertNotIn(OLD_TAIL, line)
+                self.assertNotIn(F83_TAIL, line)  # F84.d replaced the F83.c text
                 self.assertNotIn("recall.py open <id>", line)
                 self.assertTrue(line.startswith(RECALL_LINE), line[:300])
 
     def test_f83_c_the_new_tail_follows_the_search_command(self):
         lines = self.lines_of(self.part1())
         line = lines[self.recall_index(lines)]
-        self.assertIn('search "<words or regex>" (same full path for: open <id>; user --last 20; do not cd). Use it before',
-                      line)
+        self.assertIn('search "<words or regex>" ' + RECALL_TAIL + ". Use it before", line)
 
     def test_f83_d_the_rule_line_text_and_place(self):
         self.marker()
