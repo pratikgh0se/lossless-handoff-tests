@@ -6,7 +6,7 @@ import json, os, re, shutil, subprocess, sys, time, unittest
 from helpers import *
 import test_f35 as f35
 import test_f39_ledger as f39
-from test_f39_ledger import (F39, SEED3, LEAN, KEEP, MERGE_PROMPT, LEDGER2, L1, L2, LEDGER_KEYS, ts, parse_ts,
+from test_f39_ledger import (check_merge_prompt, F39, SEED3, LEAN, KEEP, MERGE_PROMPT, LEDGER2, L1, L2, LEDGER_KEYS, ts, parse_ts,
                              today_dates, SUMMARY_TEXT)
 
 D4 = "- D4 [2026-10-27] x | why: y"
@@ -125,7 +125,7 @@ class DeltaApply(F40):
     def test_f40_1_prompt_is_the_delta_prompt(self):
         self.go()
         last = self.merge_argv()[-1]
-        self.assertEqual(last, MERGE_PROMPT)
+        check_merge_prompt(self, last)
         self.assertIn("Output only the changes, one per line, nothing else:", last)
         self.assertIn('"SUPERSEDE D<old> BY D<new>: <reason>"', last)
         self.assertIn('Output "NO CHANGES" if nothing qualifies.', last)
@@ -270,7 +270,7 @@ class OwnTimeout(F40):
         i = keys.index("ledger_chars")
         self.assertEqual(keys[i + 1], "ledger_error", keys)
         j = keys.index("summary_model")
-        self.assertEqual(keys[j + 1:j + 8], LEDGER_KEYS)
+        self.assertEqual(keys[j + 1:j + 1 + len(LEDGER_KEYS)], LEDGER_KEYS)
         self.assertEqual(keys[i + 2], "duration_ms", keys)
 
 

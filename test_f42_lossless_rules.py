@@ -4,7 +4,7 @@ Reuses the F39 fixtures (seed, ledger_lines, state, health, backups ...). Entry 
 after the date; untagged = decision. Injection parts: `postcompact-inject.py --ledger --part 1|2|3`."""
 import json, os, random, re, shutil, subprocess, sys, time, unittest
 from helpers import *
-from test_f39_ledger import (F39, SEED3, LEAN, KEEP, MERGE_PROMPT, MERGE_BASE42, F42_ADD, L1, L2, LEDGER_KEYS, ts,
+from test_f39_ledger import (check_merge_prompt, F39, SEED3, LEAN, KEEP, MERGE_PROMPT, MERGE_BASE42, F42_ADD, L1, L2, LEDGER_KEYS, ts,
                              parse_ts, today_dates, SUMMARY_TEXT, Registration)
 
 TODAY = time.strftime("%Y-%m-%d", time.gmtime())
@@ -184,8 +184,7 @@ class Tags(F42):
         self.go()
         last = self.merge_argv()[-1]
         self.assertTrue(last.startswith(MERGE_BASE42), "F40.1 prompt is kept (with the kind tag in its line formats)")
-        self.assertTrue(last.endswith(F42_ADD))
-        self.assertEqual(last, MERGE_PROMPT)
+        check_merge_prompt(self, last)
 
 
 # ---------------------------------------------------------------- AC 126 RESOLVE
@@ -692,14 +691,14 @@ class TemplateAndVersion(F42):
 
     def test_ac136_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.23.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.0")
+        self.assertEqual(self.health()["hook_version"], "1.23.1")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.1")
 
     def test_ac136_health_field_order_with_resolved(self):
         self.go()
         keys = list(self.health().keys())
         i = keys.index("summary_model")
-        self.assertEqual(keys[i + 1:i + 8], LEDGER_KEYS, keys)
+        self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS, keys)
         self.assertEqual(keys[keys.index("ledger_superseded") + 1], "ledger_resolved")
         self.assertIs(type(self.health()["ledger_resolved"]), int)
 

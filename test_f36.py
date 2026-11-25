@@ -7,7 +7,7 @@ import test_f35 as f35
 from test_content import git
 
 KEYS = ["ts", "sid", "trigger", "agent_file", "stale_sections", "fallback", "summary_model", "ledger", "ledger_active",
-        "ledger_superseded", "ledger_resolved", "ledger_restored", "ledger_chars", "ledger_error", "duration_ms",
+        "ledger_superseded", "ledger_resolved", "ledger_rule_resolved", "ledger_rule_resolve_rejected", "ledger_restored", "ledger_chars", "ledger_error", "duration_ms",
         "output_chars", "truncated", "errors", "status", "hook_version", "canary_child"]
 # F37.4 adds `inline_cut` (bool); its position is not specified: tests require KEYS in order plus inline_cut anywhere.
 KEYS37 = set(KEYS) | {"inline_cut", "steer", "excerpt_chars", "excerpt_dropped"}  # F56 adds the two excerpt fields  # F53 / AC 235 adds `steer`; its position is not specified

@@ -35,8 +35,23 @@ F42_ADD = ('Tag each new entry [rule], [decision] or [task]. Record operating mo
 MERGE_BASE42 = MERGE_PROMPT_F40.replace("[YYYY-MM-DD] <decision> | why", "[YYYY-MM-DD] [rule|decision|task] <decision> | why")
 assert MERGE_BASE42.count("[rule|decision|task]") == 2
 MERGE_PROMPT = MERGE_BASE42 + " " + F42_ADD  # AMENDED by F42.2 (was: the F40.1 prompt alone)
+# F89.d: the rule sentence of the merge prompt changes; its place is not pinned, so the prompt is checked by its parts
+F42_PIECES = ("Tag each new entry [rule], [decision] or [task].", "with the concrete numbers.", "One-off approvals and status updates are [task].",
+              "SUPERSEDE the older one.", "For untagged existing entries you may output \"KIND D<n> rule|decision|task\" (at most 40).",
+              "RESOLVE D<n>: <reason>")
+
+
+def check_merge_prompt(tc, last):
+    """The merge prompt: the F42.1 base, the lean and keep sentences, the F42.2 sentences, the F89.d rule sentence."""
+    tc.assertTrue(last.startswith(MERGE_BASE42), "F40.1 prompt is kept (with the kind tag in its line formats)")
+    tc.assertIn(LEAN + " " + KEEP, last)
+    for piece in F42_PIECES:
+        tc.assertIn(piece, last)
+    tc.assertIn("Never RESOLVE a rule on your own judgement", last)
+    tc.assertIn('| user: "', last)
+    tc.assertNotIn('| user: \\"', last, "the quote in the prompt is a plain quote")
 # AMENDED by F42.2: ledger_resolved sits after ledger_superseded
-LEDGER_KEYS = ["ledger", "ledger_active", "ledger_superseded", "ledger_resolved", "ledger_restored", "ledger_chars", "ledger_error"]
+LEDGER_KEYS = ["ledger", "ledger_active", "ledger_superseded", "ledger_resolved", "ledger_rule_resolved", "ledger_rule_resolve_rejected", "ledger_restored", "ledger_chars", "ledger_error"]  # F89 adds the two rule counters
 SUMMARY_PROMPT_BITS = ('prefixed "unverified:"', "under 3500 chars")
 STANDING = "STANDING DECISIONS (do not contradict"
 SUMMARY_TEXT = "SUMMARY-F39 " + "s" * 288
@@ -295,7 +310,8 @@ class FirstMerge(F39):
         want = ["-p", "--model", "sonnet", "--output-format", "text", "--no-session-persistence", "--setting-sources", "",
                 "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--disable-slash-commands", "--tools", "",
                 "--system-prompt", MERGE_SYSTEM, MERGE_PROMPT]
-        self.assertEqual(self.merge_argv(), want)
+        self.assertEqual(self.merge_argv()[:-1], want[:-1])
+        check_merge_prompt(self, self.merge_argv()[-1])
 
     def test_merge_model_override(self):
         self.go(extra={"HANDOFF_LEDGER_MODEL": "haiku"})
@@ -968,7 +984,7 @@ class Health(F39):
         self.go()
         keys = list(self.health().keys())
         i = keys.index("summary_model")
-        self.assertEqual(keys[i + 1:i + 8], LEDGER_KEYS, keys)
+        self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS, keys)
         h = self.health()
         self.assertIsInstance(h["ledger"], str)
         for k in ("ledger_active", "ledger_superseded", "ledger_restored"):
@@ -994,7 +1010,7 @@ class Health(F39):
             self.assertEqual(h["ledger"], want)
             keys = list(h.keys())
             i = keys.index("summary_model")
-            self.assertEqual(keys[i + 1:i + 8], LEDGER_KEYS)
+            self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS)
         self.seed(SEED3)
         self.set_shim("merge", rc=1)
         self.go()
@@ -1112,16 +1128,16 @@ class LeanPromptAndTemplate(F39):
         self.go()
         # AMENDED by F42.2: the F42 sentences now follow the keep-values sentence
         last = self.merge_argv()[-1]
-        self.assertTrue(last.endswith(KEEP + " " + F42_ADD))
+        check_merge_prompt(self, last)
         self.assertLess(last.index(LEAN), last.index(KEEP))
 
     def test_ac113_merge_prompt_ends_with_lean_sentences(self):
         self.go()
         last = self.merge_argv()[-1]
-        self.assertEqual(last, MERGE_PROMPT)
+        check_merge_prompt(self, last)
         self.assertIn(LEAN, last)  # F39.10 sentences; F39.11 appends one more after them (AC 116)
         self.assertIn(LEAN + " " + KEEP, last)  # AMENDED by F42.2: no longer the very end
-        self.assertTrue(last.endswith(F42_ADD))
+        self.assertIn(LEAN, last)
         self.assertIn("Format of superseded lines", last)
 
     def test_ac114_template_compact_and_start_groups(self):
