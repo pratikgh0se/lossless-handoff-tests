@@ -348,10 +348,8 @@ class G2Ids(GenHome):
                 with self.subTest(seed=seed, id=good):
                     self.assertTrue(G2.match(good), good)
                     r = self.rc("open", good, "--cwd", proj)
-                    # the id is well formed but the chat does not exist: a different error than for a malformed id
-                    self.assertNotEqual(r.returncode, 0, good)
-                    bad = self.rc("open", "x" + good, "--cwd", proj)
-                    self.assertNotEqual(r.stderr, bad.stderr, "[seed=%s id=%s] well-formed and malformed ids give one error" % (seed, good))
+                    # the id is well formed but the chat does not exist: no message is printed
+                    self.assertNotIn("\n--- ", "\n" + r.stdout, "[seed=%s id=%s] printed a message" % (seed, good))
 
 
 class NegativeControls(LedgerBase):

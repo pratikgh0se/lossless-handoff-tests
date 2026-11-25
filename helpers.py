@@ -41,7 +41,7 @@ def safe_script_env(home, extra=None, path=None, allow_launchctl_with_fake=None)
     return e
 
 
-def run_script(script, args, home, extra=None, path=None, timeout=180, fake_launchctl=None):
+def run_script(script, args, home, extra=None, path=None, timeout=55, fake_launchctl=None):
     """Run install.sh or uninstall.sh (an absolute path in REPO) against a temp HOME. Returns CompletedProcess."""
     assert script in (INSTALL_SH, UNINSTALL_SH), script
     assert "--yes" not in args, "tests must not pass --yes (it can pull a model from the network)"
@@ -49,11 +49,11 @@ def run_script(script, args, home, extra=None, path=None, timeout=180, fake_laun
                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
 
 
-def run_install(home, *args, extra=None, path=None, timeout=180, fake_launchctl=None):
+def run_install(home, *args, extra=None, path=None, timeout=55, fake_launchctl=None):
     return run_script(INSTALL_SH, args, home, extra, path, timeout, fake_launchctl)
 
 
-def run_uninstall(home, *args, extra=None, path=None, timeout=180):
+def run_uninstall(home, *args, extra=None, path=None, timeout=55):
     return run_script(UNINSTALL_SH, args, home, extra, path, timeout)
 
 
@@ -376,7 +376,7 @@ class HookCase(unittest.TestCase):
         if raw is None:
             raw = json.dumps(payload)
         r = subprocess.run([sys.executable, PRE], input=raw, capture_output=True,
-                           text=True, env=self.env(fallback, extra), timeout=120)
+                           text=True, env=self.env(fallback, extra), timeout=55)
         return r
 
     def run_post(self, payload=None, raw=None, extra=None, args=()):

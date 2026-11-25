@@ -271,8 +271,9 @@ def valid_ids(seed):
 def malformed_ids(seed):
     r = random.Random("g2m-%s" % seed)
     s, a = hex_n(r, 8), hex_n(r, 8)
+    # G2 amendment: a consumer accepts any prefix of [A-Za-z0-9_-]+, so short or non-hex ids are not malformed here
     return ["%s:0" % s, "%s:-3" % s, "%s:x" % s, "%s" % s, "%s:" % s, "%s/%s" % (s, a), "%s/:4" % s,
-            "%s:4" % s[:7], "%sg:4" % s[:7], "%s//%s:4" % (s, a), "/%s:4" % a, "%s/%s:4" % (s, a[:6])]
+            "%s//%s:4" % (s, a), "/%s:4" % a, "%s:4 5" % s]
 
 
 # ============================================================ run helpers
