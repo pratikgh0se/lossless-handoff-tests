@@ -4,7 +4,7 @@ Single-id `open` and single-pattern `search` keep the old output: the tests comp
 batch call, because the old bytes are not stored here. Fixtures: temp HOME, keyword-only recall."""
 import os, re, subprocess, sys, unittest
 
-from helpers import REPO, installed_home
+from helpers import REPO, installed_home, PRODUCT_VERSION, HOOKS_VERSION
 from test_f44_recall import RecallBase, RECALL
 from test_content import git
 
@@ -360,9 +360,10 @@ class DocsAndVersion(unittest.TestCase):
                 self.assertRegex(t, r'recall\.py search "[^"\n]+" "[^"\n]+"')
                 self.assertRegex(t, r"recall\.py open [^\s`<\[]\S* [^\s`<\[]\S*")
 
-    def test_f84_e_the_readme_version_line_names_0_20_1_and_hooks_1_22_1(self):
+    def test_f84_e_the_readme_version_line_names_product_and_hooks_versions(self):
         t = self.read("README.md")
-        self.assertTrue([l for l in t.split("\n") if "0.21.1" in l and "1.23.1" in l], "no README line names both")
+        self.assertTrue([l for l in t.split("\n") if PRODUCT_VERSION in l and HOOKS_VERSION in l],
+                        "no README line names both %s and %s" % (PRODUCT_VERSION, HOOKS_VERSION))
 
     def test_f84_d_the_recall_agent_file_says_one_call_takes_several_ids_or_patterns(self):
         home, _ = installed_home()

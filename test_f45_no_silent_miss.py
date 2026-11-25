@@ -2,7 +2,7 @@
 Write early (pending file), recover at SessionStart compact, reconcile, install check. Temp HOME, shim `claude`."""
 import hashlib, json, os, plistlib, re, shutil, signal, subprocess, sys, time, unittest
 
-from helpers import (private_state, copy_hook_scripts, strip_node_tail, HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
+from helpers import (private_state, copy_hook_scripts, strip_node_tail, HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist, HOOKS_VERSION)
 
 BOUNDARY = {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted"}
 CHECK_TAIL = " Run the installer again, then restart Claude Code."
@@ -98,7 +98,7 @@ class WriteEarly(F45Base):
         for k in ("ts", "trigger", "hook_version"):
             self.assertIn(k, d)
         self.assertEqual(d["trigger"], "auto")
-        self.assertEqual(d["hook_version"], "1.23.1")
+        self.assertEqual(d["hook_version"], HOOKS_VERSION)
         self.assertIn("PREBOUNDARY-MARK", self.latest())
         found = [pth for pth, txt in self.all_hd_text() if "PREBOUNDARY-MARK" in txt and pth.endswith(".md")]
         self.assertGreaterEqual(len(found), 1)
@@ -357,7 +357,8 @@ class Wiring(unittest.TestCase):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
                 src = open(path).read()
-                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.23\.1["']""")
+                import re
+                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']%s["']""" % re.escape(HOOKS_VERSION))
 
 
 class VersionInHealth(F45Base):
@@ -365,8 +366,8 @@ class VersionInHealth(F45Base):
         self.write_transcript([user(PRE_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.23.1")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.1")
+        self.assertEqual(self.health()["hook_version"], HOOKS_VERSION)
+        self.assertEqual(self.sidecar("S")["hook_version"], HOOKS_VERSION)
 
 
 if __name__ == "__main__":

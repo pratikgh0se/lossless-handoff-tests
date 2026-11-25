@@ -983,8 +983,8 @@ class Health(F39):
     def test_ac108_field_order_and_types(self):
         self.go()
         keys = list(self.health().keys())
-        i = keys.index("summary_model")
-        self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS, keys)
+        self.assertIn("summary_model", keys)  # G3 (F90.a): key set, not key order
+        self.assertTrue(set(LEDGER_KEYS) <= set(keys), keys)
         h = self.health()
         self.assertIsInstance(h["ledger"], str)
         for k in ("ledger_active", "ledger_superseded", "ledger_restored"):
@@ -1009,8 +1009,8 @@ class Health(F39):
             h = self.health()
             self.assertEqual(h["ledger"], want)
             keys = list(h.keys())
-            i = keys.index("summary_model")
-            self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS)
+            self.assertIn("summary_model", keys)  # G3 (F90.a): key set, not key order
+            self.assertTrue(set(LEDGER_KEYS) <= set(keys), keys)
         self.seed(SEED3)
         self.set_shim("merge", rc=1)
         self.go()

@@ -41,7 +41,7 @@ def safe_script_env(home, extra=None, path=None, allow_launchctl_with_fake=None)
     return e
 
 
-def run_script(script, args, home, extra=None, path=None, timeout=180, fake_launchctl=None):
+def run_script(script, args, home, extra=None, path=None, timeout=55, fake_launchctl=None):
     """Run install.sh or uninstall.sh (an absolute path in REPO) against a temp HOME. Returns CompletedProcess."""
     assert script in (INSTALL_SH, UNINSTALL_SH), script
     assert "--yes" not in args, "tests must not pass --yes (it can pull a model from the network)"
@@ -49,11 +49,11 @@ def run_script(script, args, home, extra=None, path=None, timeout=180, fake_laun
                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
 
 
-def run_install(home, *args, extra=None, path=None, timeout=180, fake_launchctl=None):
+def run_install(home, *args, extra=None, path=None, timeout=55, fake_launchctl=None):
     return run_script(INSTALL_SH, args, home, extra, path, timeout, fake_launchctl)
 
 
-def run_uninstall(home, *args, extra=None, path=None, timeout=180):
+def run_uninstall(home, *args, extra=None, path=None, timeout=55):
     return run_script(UNINSTALL_SH, args, home, extra, path, timeout)
 
 
@@ -66,6 +66,34 @@ def private_state(hd):
 
 
 PACKAGE_DIR = os.path.join(HOOKS_DIR, "lossless_handoff")
+
+
+# ---- F90.h: one version source. Tests read the `VERSION` file in the repo root and never write a version number.
+VERSION_FILE = os.path.join(REPO, "VERSION")
+
+
+def read_versions():
+    """(product, hooks) from `VERSION` (2 lines: `product=<x.y.z>` and `hooks=<x.y.z>`). A tree from before F90 has no
+    such file: then the product version is the top CHANGELOG entry and the hooks version is the HOOK_VERSION constant
+    of guard_common.py, so the older tests still run on an older tree."""
+    if os.path.isfile(VERSION_FILE):
+        with open(VERSION_FILE) as f:
+            kv = dict(l.strip().split("=", 1) for l in f.read().split("\n") if "=" in l)
+        return kv.get("product", ""), kv.get("hooks", "")
+    prod = hooks = ""
+    try:
+        with open(os.path.join(REPO, "CHANGELOG.md")) as f:
+            m = re.search(r"(?m)^## \[([0-9]+\.[0-9]+\.[0-9]+)\]", f.read())
+        prod = m.group(1) if m else ""
+        with open(os.path.join(HOOKS_DIR, "guard_common.py")) as f:
+            m = re.search(r"""HOOK_VERSION\s*=\s*["']([0-9.]+)["']""", f.read())
+        hooks = m.group(1) if m else ""
+    except OSError:
+        pass
+    return prod, hooks
+
+
+PRODUCT_VERSION, HOOKS_VERSION = read_versions()
 
 
 def copy_hook_scripts(dest):
@@ -348,7 +376,7 @@ class HookCase(unittest.TestCase):
         if raw is None:
             raw = json.dumps(payload)
         r = subprocess.run([sys.executable, PRE], input=raw, capture_output=True,
-                           text=True, env=self.env(fallback, extra), timeout=120)
+                           text=True, env=self.env(fallback, extra), timeout=55)
         return r
 
     def run_post(self, payload=None, raw=None, extra=None, args=()):

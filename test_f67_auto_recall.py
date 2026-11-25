@@ -485,30 +485,7 @@ class Health(HookBase):
 
 # ------------------------------------------------------------------ F67.e versions
 class Versions(unittest.TestCase):
-    def test_f67_e_install_sh_version_is_0_20_1(self):
-        home = os.path.realpath(tempfile.mkdtemp(prefix="f67v-"))
-        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
-        r = run_install(home, "--version")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.21.1", r.stdout + r.stderr)
-
-    def test_f67_e_installed_manifest_version_is_1_22_1(self):
-        home, _ = installed_home()
-        with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.23.1")
-
-    def test_f67_e_changelog_has_0_20_1_first(self):
-        with open(os.path.join(REPO, "CHANGELOG.md")) as f:
-            heads = re.findall(r"(?m)^## \[([0-9.]+)\]", f.read())
-        self.assertEqual(heads[0], "0.21.1")
-
-    def test_f67_e_hook_version_constants_are_1_22_1(self):
-        for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py"):
-            p = os.path.join(HOOKS_DIR, n)
-            self.assertTrue(os.path.isfile(p), n)
-            with open(p) as f:
-                self.assertRegex(f.read(), r"""HOOK_VERSION\s*=\s*["']1\.23\.1["']""", n)
-
+    # F67.e version pins were removed (F90.h): `test_f90_version.py` checks the one VERSION file.
     def test_f67_e_auto_recall_file_is_in_the_manifest_when_installed(self):
         home, _ = installed_home("--auto-recall")
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:

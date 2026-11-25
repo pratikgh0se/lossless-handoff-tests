@@ -691,15 +691,16 @@ class TemplateAndVersion(F42):
 
     def test_ac136_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.23.1")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.1")
+        self.assertEqual(self.health()["hook_version"], HOOKS_VERSION)
+        self.assertEqual(self.sidecar("S")["hook_version"], HOOKS_VERSION)
 
     def test_ac136_health_field_order_with_resolved(self):
         self.go()
         keys = list(self.health().keys())
-        i = keys.index("summary_model")
-        self.assertEqual(keys[i + 1:i + 1 + len(LEDGER_KEYS)], LEDGER_KEYS, keys)
-        self.assertEqual(keys[keys.index("ledger_superseded") + 1], "ledger_resolved")
+        # G3 (F90.a): the contract is the key set, not the key order
+        self.assertIn("summary_model", keys)
+        self.assertTrue(set(LEDGER_KEYS) <= set(keys), keys)
+        self.assertIn("ledger_resolved", keys)
         self.assertIs(type(self.health()["ledger_resolved"]), int)
 
     def test_ledger_resolved_present_when_disabled_and_none(self):

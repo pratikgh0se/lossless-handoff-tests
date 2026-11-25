@@ -4,7 +4,7 @@ transcripts in a temp HOME; the meaning index is off (closed port), so the searc
 Hit lines must equal the lines `recall.py search` prints for the same words (same scope and ranking)."""
 import json, os, re, subprocess, sys, unittest
 
-from helpers import copy_hook_scripts
+from helpers import copy_hook_scripts, HOOKS_VERSION
 from levers_common import Lab, Mcp, RULE_SENTENCE, write_transcript
 from test_f67_auto_recall import HookBase, HIT_RE
 
@@ -68,7 +68,7 @@ class Handshake(Server):
         self.assertEqual(r["id"], 1)
         res = r["result"]
         self.assertEqual(res["serverInfo"]["name"], "lossless-recall")
-        self.assertEqual(res["serverInfo"]["version"], "1.23.1")
+        self.assertEqual(res["serverInfo"]["version"], HOOKS_VERSION)
         self.assertIn("tools", res["capabilities"])
         self.assertIsInstance(res["protocolVersion"], str)
 

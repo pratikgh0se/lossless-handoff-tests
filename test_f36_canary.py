@@ -183,8 +183,9 @@ class Healthy(CanaryCase):
     def test_ac70_pass(self):
         p = self.run_canary()
         h = self.assert_result(p, 0, "pass")
-        self.assertEqual(list(h.keys()), ["ts", "sid", "trigger", "result", "reason", "variants", "duration_ms",
-                                          "est_cost_usd", "hook_version", "canary_child"])
+        want = {"ts", "sid", "trigger", "result", "reason", "variants", "duration_ms", "est_cost_usd", "hook_version",
+                "canary_child"}  # G3 (F90.a): the contract is the key set, not the order
+        self.assertTrue(want <= set(h.keys()), "missing keys: %s" % sorted(want - set(h.keys())))
         self.assertIsNone(h["reason"])
         self.assertEqual(h["variants"], {"A": "pass", "B": "pass"})
         self.assertRegex(h["ts"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")

@@ -2,7 +2,7 @@
 Subagent isolation (agent_id hook inputs) and always-on managed hooks. Temp HOME, shim `claude`."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import copy_hook_scripts, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, run_install
+from helpers import copy_hook_scripts, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, run_install, HOOKS_VERSION
 from test_f45_no_silent_miss import (F45Base, BOUNDARY, RECOVERED_HEAD, CHECK_TAIL, iso)
 
 SID = "S"
@@ -320,7 +320,8 @@ class Version(unittest.TestCase):
     def test_ac188_hook_version_in_both_hooks(self):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
-                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.23\.1["']""")
+                import re
+                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']%s["']""" % re.escape(HOOKS_VERSION))
 
 
 class VersionInHealth(F46Base):
@@ -330,8 +331,8 @@ class VersionInHealth(F46Base):
         self.write_transcript([user(PARENT_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.23.1")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.1")
+        self.assertEqual(self.health()["hook_version"], HOOKS_VERSION)
+        self.assertEqual(self.sidecar("S")["hook_version"], HOOKS_VERSION)
 
 
 if __name__ == "__main__":
