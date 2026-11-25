@@ -98,7 +98,7 @@ class WriteEarly(F45Base):
         for k in ("ts", "trigger", "hook_version"):
             self.assertIn(k, d)
         self.assertEqual(d["trigger"], "auto")
-        self.assertEqual(d["hook_version"], "1.22.0")
+        self.assertEqual(d["hook_version"], "1.22.1")
         self.assertIn("PREBOUNDARY-MARK", self.latest())
         found = [pth for pth, txt in self.all_hd_text() if "PREBOUNDARY-MARK" in txt and pth.endswith(".md")]
         self.assertGreaterEqual(len(found), 1)
@@ -282,10 +282,13 @@ class Check(F45Base):
         # F52.b: with no or unreadable settings, --check adds its own line. It is not under test here (AC 221 covers it).
         return "".join(l for l in r.stdout.splitlines(True) if not l.startswith("HANDOFF CHECK: Claude Code deletes chat"))
 
-    def one_line(self, out, needle):
+    def one_line(self, out, needle, tail=True):
         self.assertTrue(out.startswith("HANDOFF CHECK: "), out)
         self.assertEqual(out.rstrip("\n").count("\n"), 0, out)
-        self.assertTrue(out.rstrip("\n").endswith(CHECK_TAIL), out)
+        if tail:
+            self.assertTrue(out.rstrip("\n").endswith(CHECK_TAIL), out)
+        else:  # F86.a: a data problem gets no installer advice
+            self.assertNotIn("installer", out)
         self.assertIn(needle, out)
 
     def test_ac178_all_well_prints_nothing(self):
@@ -320,7 +323,7 @@ class Check(F45Base):
         json.dump({"ts": iso(), "days": 2, "compactions": 5, "handoffs": 3, "recovered": 0, "missed": 2,
                    "missed_interactive": 2, "missed_headless": 0, "killed": 0, "sessions": []}, open(rp, "w"))
         out = self.check()
-        self.one_line(out, "2 compactions without a handoff")
+        self.one_line(out, "2 compactions without a handoff", tail=False)
         self.assertIn("precompact-handoff.py --reconcile", out)
         self.assertIn("noticed_ts", self.read_json(rp))
         self.assertEqual(self.check(), "")
@@ -353,7 +356,7 @@ class Wiring(unittest.TestCase):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
                 src = open(path).read()
-                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.0["']""")
+                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.1["']""")
 
 
 class VersionInHealth(F45Base):
@@ -361,8 +364,8 @@ class VersionInHealth(F45Base):
         self.write_transcript([user(PRE_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.22.0")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.22.0")
+        self.assertEqual(self.health()["hook_version"], "1.22.1")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.22.1")
 
 
 if __name__ == "__main__":
