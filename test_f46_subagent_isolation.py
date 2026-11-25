@@ -266,7 +266,7 @@ class ManagedHooks(F46Base):
         d = self.run_managed()
         self.assertEqual(set(d), {"hooks"}, list(d))
         self.assertEqual(set(d["hooks"]), set(HANDOFF_EVENTS))
-        self.assertEqual({g.get("matcher") for g in d["hooks"]["SessionStart"]}, {"compact", "startup", "resume"})
+        self.assertEqual({g.get("matcher") for g in d["hooks"]["SessionStart"]}, {"compact", "startup", "resume", "clear"})
         self.assertEqual(self.triples(d), self.triples(self.template()))
         self.assertFalse(os.path.exists(self.sys_path), "the system file must not be created by install.sh")
 
@@ -320,7 +320,7 @@ class Version(unittest.TestCase):
     def test_ac188_hook_version_in_both_hooks(self):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
-                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.22\.2["']""")
+                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.23\.0["']""")
 
 
 class VersionInHealth(F46Base):
@@ -330,8 +330,8 @@ class VersionInHealth(F46Base):
         self.write_transcript([user(PARENT_MSG), asst("ok")])
         r = self.run_pre(self.payload())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.health()["hook_version"], "1.22.2")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.22.2")
+        self.assertEqual(self.health()["hook_version"], "1.23.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.0")
 
 
 if __name__ == "__main__":

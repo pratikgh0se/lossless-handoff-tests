@@ -12,10 +12,10 @@ KINDS = ("rule", "decision", "task")
 RANK = {"rule": 0, "decision": 1, "task": 2}
 FULL_RE = re.compile(r"^- D(\d+) \[\d{4}-\d\d-\d\d\] (?:\[(rule|decision|task)\] )?(.*)$")
 IDX_RE = re.compile(r"^- D(\d+) \[(rule|decision|task)\] (.*)$")
-COUNT_RE = re.compile(r"^- \((\d+) more active entries not listed; read the full ledger\)$")
+COUNT_RE = re.compile(r"^- \((\d+) more active entries not listed; search them: python3 \S*recall\.py decisions \"<words>\"\)$")
 HEAD_RE = r"^Project decisions for this repo \(part %d of the ledger;.*full ledger: (/.+decisions\.md)\)"
-NOTE_PFX = "Index entries are summaries: read the full entry in "
-NOTE_SFX = " before acting on one."
+NOTE_PFX = "Index entries are summaries: before you act on one, read the full entry: python3 "
+NOTE_SFX = "recall.py decisions D<n>"
 RESOLVED_RE = r"^- D%d \[(\d{4}-\d\d-\d\d)\] RESOLVED \[(\d{4}-\d\d-\d\d)\]: %s \| was: (.*)$"
 
 
@@ -117,7 +117,7 @@ class F42(F39):
             first = outs[ip[0] - 1]
             self.assertIn(NOTE_PFX, first)
             self.assertIn(NOTE_SFX, first)
-            self.assertIn("decisions.md", first[first.index(NOTE_PFX):])
+            self.assertIn("recall.py decisions", first[first.index(NOTE_PFX):])
         else:
             self.assertNotIn(NOTE_PFX, "".join(outs))
         return full, idx, cnt
@@ -692,8 +692,8 @@ class TemplateAndVersion(F42):
 
     def test_ac136_hook_version_1_10_0(self):
         self.go()
-        self.assertEqual(self.health()["hook_version"], "1.22.2")
-        self.assertEqual(self.sidecar("S")["hook_version"], "1.22.2")
+        self.assertEqual(self.health()["hook_version"], "1.23.0")
+        self.assertEqual(self.sidecar("S")["hook_version"], "1.23.0")
 
     def test_ac136_health_field_order_with_resolved(self):
         self.go()
