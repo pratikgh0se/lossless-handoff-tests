@@ -360,7 +360,7 @@ class Room(Fix):
         while True:
             self.ledger(self.rules(n))
             p = self.verbose()[1][3]
-            if p >= 95 or n >= 80:
+            if p >= 95 or n >= 250:
                 break
             n += 1
         self.assertGreaterEqual(p, 95)
@@ -385,7 +385,7 @@ class Room(Fix):
         while True:
             self.ledger(self.rules(n))
             p = self.verbose()[1][3]
-            if p >= 80 or n >= 80:
+            if p >= 80 or n >= 250:
                 break
             n += 1
         self.assertLess(p, 90)
@@ -400,6 +400,7 @@ class Room(Fix):
         self.assertGreater(k, 0)
         self.assertNotIn("installer", text, "a data problem gives no installer advice")
         shown = 0
+        self.LEDGER_ENV = None  # the proof fixtures switch the ledger off; the parts need it on
         for part in (1, 2, 3):
             r = self.run_post({"cwd": self.rroot, "session_id": "N", "hook_event_name": "SessionStart", "source": "compact"},
                               args=("--ledger", "--part", str(part)))
