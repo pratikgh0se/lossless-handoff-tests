@@ -243,6 +243,8 @@ def malformed_lines(seed, start=100):
         lambda n, u, d: "- DX%d [%s] [rule] %s | why: y" % (n, d, u),
         lambda n, u, d: "- D%d [%s] SUPERSEDED by D%d: [rule] %s | because: r" % (n, d, n + 1, u),  # no date in by-part
         lambda n, u, d: "- D%d [%s] RESOLVED: %s | was: x" % (n, d, u),  # no date in resolved
+        lambda n, u, d: "- D%d [%s] DONE %s: %s" % (n, d, d, u),  # capitals word followed by a date
+        lambda n, u, d: "- D%d [%s] [task] SUPERSEDED by D5 (old) %s | why: x" % (n, d, u),
     ]
     r.shuffle(makers)
     out = []

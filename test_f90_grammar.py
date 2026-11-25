@@ -11,7 +11,7 @@ from test_f86_check_advice import Fix
 
 DATE = r"(\d{4}-\d\d-\d\d)"
 HEAD = r"- D([1-9]\d*) \[" + DATE + r"\] "
-CAPS = re.compile(r"^[A-Z]+(?: \[|:)")
+CAPS = re.compile(r"^[A-Z]{2,}(?: \[|:| \d{4}-\d\d-\d\d)")  # F90.a G1 text rule (amended 2026-11-25)
 G2 = re.compile(r"^([0-9a-f-]{8})(?:/([0-9a-f-]{8}))?:([1-9]\d*)$")
 
 
@@ -30,15 +30,13 @@ def parse_g1(line):
         body, tg = m.group(4), m.group(3)
     else:
         m = re.match(HEAD + r"(.*)$", line)
-        if not m or m.group(3).startswith("[") and False:
+        if not m:
             return None
         body, tg = m.group(3), None
-        if CAPS.match(body):
-            return None
     why = None
     if " | why: " in body:
         body, why = body.rsplit(" | why: ", 1)
-    if body == "" or (tg is None and CAPS.match(body)):
+    if body == "" or CAPS.match(body) or body.startswith(("SUPERSEDED", "RESOLVED")):
         return None
     return {"form": "active", "n": int(m.group(1)), "date": m.group(2), "tag": tg, "text": body, "why": why}
 

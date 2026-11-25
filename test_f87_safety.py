@@ -1,7 +1,7 @@
 """F87 Safety fixes (0.20.2, hooks 1.22.2). Code-blind: written from the F87 text only.
 F87.a / e.1-e.4: recall stays in the project of the session (CLAUDE_CODE_SESSION_ID). F87.b / e.5-e.8: more secret shapes.
-F87.c / e.9-e.10: private state folders. F87.d / e.11-e.14: a handoff serves one compaction. F87.e.15: the pins are in
-test_versions_0211.py.
+F87.c / e.9-e.10: private state folders. F87.d / e.11-e.14: a handoff serves one compaction. F87.e.15: the version checks are in
+test_f90_version.py.
 Every child process gets a built environment: CLAUDE_CODE_SESSION_ID is set only where a test sets it, so the suite can run
 inside a Claude session."""
 import json, os, re, shutil, stat, subprocess, sys, tempfile, time, unittest
