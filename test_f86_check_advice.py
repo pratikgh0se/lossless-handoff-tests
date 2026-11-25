@@ -4,7 +4,7 @@ F86.b: `--check --verbose` prints `ok:` / `problem:` lines, three `info:` lines 
 line. F86.d: docs and the README version line. F86.e.6: the pins are in test_versions_0202.py."""
 import glob, hashlib, json, os, re, subprocess, sys, tempfile, shutil, stat, time, unittest
 
-from helpers import REPO, HOOKS_DIR, copy_hook_scripts, installed_settings, installed_home, run_install
+from helpers import private_state, REPO, HOOKS_DIR, copy_hook_scripts, installed_settings, installed_home, run_install
 from test_f47_proof_receipts import ProofBase, BTS
 from test_f45_no_silent_miss import BOUNDARY, iso
 from test_f44_recall import slug
@@ -56,6 +56,7 @@ class Fix(ProofBase):
 
     def missed(self, n=2):
         os.makedirs(self.hd, exist_ok=True)
+        private_state(self.hd)
         json.dump({"ts": iso(), "days": 2, "compactions": n + 3, "handoffs": 3, "recovered": 0, "missed": n,
                    "missed_interactive": n, "missed_headless": 0, "killed": 0, "sessions": []},
                   open(os.path.join(self.hd, "reconcile.json"), "w"))
@@ -63,6 +64,7 @@ class Fix(ProofBase):
     def failed_proof(self):
         # one verdict with one failed check, written as `--prove` writes it (F47 b); no claims run, so no claims line
         os.makedirs(self.hd, exist_ok=True)
+        private_state(self.hd)
         with open(os.path.join(self.hd, "proofs.jsonl"), "w") as f:
             f.write(json.dumps({"ts": iso(), "receipt_ts": iso(-100), "sid": "S", "agent_id": None,
                                 "checks": {"lossless": "pass", "delivered": "fail"},

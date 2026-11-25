@@ -2,7 +2,7 @@
 Write early (pending file), recover at SessionStart compact, reconcile, install check. Temp HOME, shim `claude`."""
 import hashlib, json, os, plistlib, re, shutil, signal, subprocess, sys, time, unittest
 
-from helpers import (copy_hook_scripts, strip_node_tail, HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
+from helpers import (private_state, copy_hook_scripts, strip_node_tail, HookCase, HOOKS_DIR, PRE, POST, PLAIN, user, asst, installed_settings, installed_plist)
 
 BOUNDARY = {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted"}
 CHECK_TAIL = " Run the installer again, then restart Claude Code."
@@ -274,6 +274,7 @@ class Check(F45Base):
                   open(os.path.join(self.hooks_home, ".handoff-manifest.json"), "w"))
 
     def check(self):
+        private_state(self.hd)
         t = time.time()
         r = subprocess.run([sys.executable, os.path.join(self.hooks_home, "postcompact-inject.py"), "--check"],
                            input="", capture_output=True, text=True, env=self.env(None), timeout=30)
@@ -356,7 +357,7 @@ class Wiring(unittest.TestCase):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
                 src = open(path).read()
-                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.1["']""")
+                self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.2["']""")
 
 
 class VersionInHealth(F45Base):

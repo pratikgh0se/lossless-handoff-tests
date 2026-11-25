@@ -57,6 +57,14 @@ def run_uninstall(home, *args, extra=None, path=None, timeout=180):
     return run_script(UNINSTALL_SH, args, home, extra, path, timeout)
 
 
+def private_state(hd):
+    """F87.c: `--check` reports a state folder (or `projects/`) with a group or other bit. A test that makes the folder
+    with its own makedirs gets the default umask, so it calls this before `--check` to make the folders 0700 first."""
+    for p in (hd, os.path.join(hd, "projects")):
+        if os.path.isdir(p):
+            os.chmod(p, 0o700)
+
+
 PACKAGE_DIR = os.path.join(HOOKS_DIR, "lossless_handoff")
 
 

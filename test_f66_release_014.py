@@ -423,7 +423,7 @@ class Versions(unittest.TestCase):
         for n in ("precompact-handoff.py", "postcompact-inject.py"):
             with open(os.path.join(HOOKS_DIR, n)) as f:
                 src = f.read()
-            self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.1["']""", n)
+            self.assertRegex(src, r"""HOOK_VERSION\s*=\s*["']1\.22\.2["']""", n)
 
 
 if __name__ == "__main__":

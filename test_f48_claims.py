@@ -3,7 +3,7 @@ Claims register: evaluation by `--prove`, `--claims`, `--claims-lint`, `--check`
 are run from a temp COPY of the hooks dir so a custom claims.json can sit next to them."""
 import json, os, re, shutil, subprocess, sys, time, unittest
 
-from helpers import copy_hook_scripts, HOOKS_DIR, user, installed_settings
+from helpers import private_state, copy_hook_scripts, HOOKS_DIR, user, installed_settings
 from test_f45_no_silent_miss import F45Base, iso
 from test_f47_proof_receipts import sha, jl
 
@@ -170,6 +170,7 @@ class Alert(ClaimsBase):
         self.set_reconcile(10, 9)
 
     def check(self):
+        private_state(self.hd)
         r = subprocess.run([sys.executable, self.post, "--check"], input="", capture_output=True, text=True,
                            env=self.env(None), timeout=30)
         self.assertEqual(r.returncode, 0, r.stderr)

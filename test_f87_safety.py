@@ -529,8 +529,8 @@ class OneCompaction(ProofBase):
             for r in rows:
                 f.write(json.dumps(r) + "\n")
         second = self.part_ctx(1, self.compact_payload())
-        self.assertNotEqual(strip_node_tail(second), PLAIN + T1)
         self.assertTrue(second.startswith(("HANDOFF RECOVERED:", "HANDOFF DEGRADED:")), second[:200])
+        self.assertFalse(second.startswith(PLAIN), second[:200])
 
 
 if __name__ == "__main__":

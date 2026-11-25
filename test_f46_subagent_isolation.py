@@ -320,7 +320,7 @@ class Version(unittest.TestCase):
     def test_ac188_hook_version_in_both_hooks(self):
         for path in (PRE, POST):
             with self.subTest(os.path.basename(path)):
-                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.22\.1["']""")
+                self.assertRegex(open(path).read(), r"""HOOK_VERSION\s*=\s*["']1\.22\.2["']""")
 
 
 class VersionInHealth(F46Base):
