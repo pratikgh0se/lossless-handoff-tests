@@ -84,6 +84,17 @@ class OpenMany(Base):
         self.assertEqual(self.blocks(out), [self.mid(1), self.mid(2)])
         self.assertEqual(out.count("GAMMAONE"), 1)
 
+    def test_f84_a_repeated_ids_are_removed_first_so_open_a_a_is_open_a(self):
+        a = self.mid(2)
+        self.assertEqual(self.ok("open", a, a), self.ok("open", a))
+        self.assertGreater(len(self.blocks(self.ok("open", a, a))), 1, "the old default around of one id")
+
+    def test_f84_a_the_limit_of_10_counts_the_ids_as_given(self):
+        ids = [self.mid(i) for i in range(1, 11)] + [self.mid(1)]
+        r = self.rc("open", *ids)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("recall.py: at most 10 ids in one call", r.stdout + r.stderr)
+
     def test_f84_1_a_single_id_open_is_the_old_open(self):
         one = self.ok("open", self.mid(2))
         self.assertEqual(one, self.ok("open", self.mid(2), "--around", "2"), "the default around of one id is 2")
@@ -169,17 +180,31 @@ class OpenCaps(Base):
         self.assertEqual(len(CUT.findall(out)), 2)
 
     def test_f84_a_whole_ids_removed_by_the_total_cap_are_listed_on_the_last_line(self):
-        ids = self.long_session(5, 8000)
-        r = self.rc("open", *ids, "--full")
+        ids = self.long_session(30, 5000)
+        args = [ids[2], ids[9], ids[16], ids[23]]  # --around 2 for each: 20 messages of 1,000 characters at least
+        r = self.rc("open", *args, "--around", "2")
         self.assertEqual(r.returncode, 0, r.stdout[-300:])
         lines = r.stdout.rstrip("\n").split("\n")
         m = NOT_SHOWN_IDS.match(lines[-1])
         self.assertTrue(m, lines[-1][-200:])
         missing = m.group("ids").split(" ")
-        shown = self.blocks(r.stdout)
-        self.assertTrue(missing and shown, (shown, missing))
-        self.assertEqual(shown + missing, ids, "shown ids and listed ids make the argument list in order")
+        self.assertTrue(missing)
+        self.assertEqual(missing, args[len(args) - len(missing):], "the ids left out are the last ones, in argument order")
+        self.assertIn(args[0], self.blocks(r.stdout))
+        for i in missing:
+            self.assertNotIn(i, self.blocks(r.stdout))
         self.assertNotIn("not shown", "\n".join(lines[:-1]))
+        self.assertLessEqual(len(r.stdout), 12500)
+
+    def test_f84_a_with_full_the_caps_of_f44_12_stay_and_no_id_is_removed(self):
+        ids = self.long_session(2, 50000)
+        r = self.rc("open", *ids, "--full")
+        self.assertEqual((r.returncode, r.stderr), (0, ""), r.stdout[-300:])
+        self.assertEqual(self.blocks(r.stdout), ids)
+        self.assertNotIn("not shown", r.stdout)
+        self.assertEqual([int(m) for m in CUT.findall(r.stdout)], [10000, 10000])
+        for i in ids:
+            self.assertIn("[cut: 10000 more chars; continue with: recall.py open %s --full --from 40000]" % i, r.stdout)
 
 
 class SearchMany(Base):
