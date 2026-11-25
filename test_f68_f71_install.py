@@ -375,17 +375,17 @@ class Versions(unittest.TestCase):
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         r = run_install(home, "--version")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("0.20.1", r.stdout + r.stderr)
+        self.assertIn("0.20.2", r.stdout + r.stderr)
 
     def test_installed_manifest_version_is_1_22_1(self):
         home, _ = installed_home()
         with open(os.path.join(home, ".claude", "hooks", ".handoff-manifest.json")) as f:
-            self.assertEqual(json.load(f)["version"], "1.22.1")
+            self.assertEqual(json.load(f)["version"], "1.22.2")
 
     def test_changelog_has_0_20_1_first(self):
         with open(os.path.join(REPO, "CHANGELOG.md")) as f:
             heads = re.findall(r"(?m)^## \[([0-9.]+)\]", f.read())
-        self.assertEqual(heads[0], "0.20.1")
+        self.assertEqual(heads[0], "0.20.2")
 
     def test_hook_version_constants_are_1_22_1_in_every_hook_that_has_one(self):
         for n in ("precompact-handoff.py", "postcompact-inject.py", "auto-recall.py", "recall-mcp.py", "reanchor.py",
