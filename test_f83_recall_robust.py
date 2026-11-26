@@ -204,7 +204,9 @@ class McpRegistered(RulesBase):
         register_mcp(self.home)
         lines = self.lines_of(self.part1())
         i = self.recall_index(lines)
-        self.assertEqual(lines[i + 1], RULE_SENTENCE + " If Bash is not allowed, call search_earlier_chat.")
+        self.assertTrue(lines[i + 1].startswith(RULE_SENTENCE), lines[i + 1])  # the tool name is a contract token
+        self.assertIn("Bash", lines[i + 1])
+        self.assertIn("search_earlier_chat", lines[i + 1])
         self.assertEqual(MCP_SUFFIX, " If Bash is not allowed, call search_earlier_chat.")
 
 

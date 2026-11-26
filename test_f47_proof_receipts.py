@@ -450,7 +450,7 @@ class Alert(ProofBase):
         self.assertTrue(out.startswith("HANDOFF CHECK: "), out)
         self.assertIn("proof failed: 1 checks", out)
         self.assertIn("proof-report.md", out)
-        self.assertEqual(self.check(), "")
+        self.assertNotIn("proof failed", self.check())  # F91.a: the F91 text may stay; the F47.c notice is once only
 
     def test_ac195_plist_runs_reconcile_and_prove(self):
         d, _ = installed_plist("handoff-reconcile")  # the plist that install.sh wrote (macOS)

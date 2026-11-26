@@ -77,9 +77,13 @@ class Classes(Fix):
     def test_f86_e1_only_a_failed_proof_prints_the_data_line_without_installer_advice(self):
         self.failed_proof()
         out = self.run_check()
-        self.assertEqual(out, "HANDOFF CHECK: proof failed: 1 checks; see proof-report.md.\n")
+        # F91.a: the line holds the once-only F47.c notice and may hold the F91.a text too; check its parts (F90.i)
+        self.assertTrue(out.startswith("HANDOFF CHECK: "), out)
+        self.assertEqual(out.rstrip("\n").count("\n"), 0, out)
+        self.assertIn("proof failed: 1 checks", out)
+        self.assertIn("proof-report.md", out)
         self.assertNotIn("installer", out)
-        self.assertEqual(self.run_check(), "", "shown once")
+        self.assertNotIn("proof failed", self.run_check(), "the F47.c notice is shown once")
 
     def test_f86_a_only_missed_compactions_prints_a_data_line_without_installer_advice(self):
         self.missed(2)
@@ -145,7 +149,8 @@ class Classes(Fix):
         os.remove(os.path.join(self.hooks_home, "handoff-nudge.py"))
         self.failed_proof()
         out = self.run_check()
-        self.assertRegex(out, r"^HANDOFF CHECK: .+\. " + re.escape(ADVICE) + r" Also: proof failed: 1 checks; see proof-report\.md\.\n$")
+        self.assertRegex(out, r"^HANDOFF CHECK: .+\. " + re.escape(ADVICE) + r" Also: .*proof failed: 1 checks.*\n$")
+        self.assertEqual(out.rstrip("\n").count("\n"), 0, out)
 
 
 class Verbose(Fix):
