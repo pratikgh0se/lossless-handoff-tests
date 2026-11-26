@@ -97,6 +97,14 @@ def section(text, heading):
 
 
 class F35(HookCase):
+    def assert_unchanged_warning(self, w, t0):
+        """The unchanged-sections warning: the marker prefix, the section names (contract) and the time; the joining
+        words are wording (F90.i)."""
+        self.assertIsNotNone(w)
+        self.assertTrue(w.startswith(WARN_PFX), w)
+        for part in ("Parallel work running", "In progress", "Exact next step", "unchanged", utc(t0)):
+            self.assertIn(part, w)
+
     def put_agent(self, body, meta=None, mtime=None, age_min=0, raw_meta=None):
         a = self.agent_file(body, meta=meta, age_min=age_min, raw_meta=raw_meta)
         if mtime is not None:
@@ -124,7 +132,9 @@ class Staleness(F35):
         os.utime(os.path.join(self.hd, "S-agent.md"), (m, m))
         t = self.text_with([user("late message", timestamp=iso(m + 11 * 60)), asst("ok")])
         w = warn_line(t)
-        self.assertEqual(w, WARN_PFX + "file written %s is older than the last user message by more than 10 min" % utc(m))
+        self.assertTrue(w.startswith(WARN_PFX), w)  # wording: check the required parts (F90.i)
+        for part in (utc(m), "older than the last user message", "10 min"):
+            self.assertIn(part, w)
         self.assertEqual(t.index(w) + len(w) + 1, t.index(AGENT_H))
         self.assertIn(self.body400.strip(), t)
         t = self.text_with([user("on the edge", timestamp=iso(m + 10 * 60)), asst("ok")])
@@ -271,7 +281,7 @@ class Staleness(F35):
     def test_ac38_three_user_messages_after_nudge(self):
         t0 = self._hook_stale_world()
         t = self.text_with(self._entries_after(t0, 3, 0))
-        self.assertEqual(warn_line(t), WARN_PFX + "Parallel work running, In progress, Exact next step unchanged since " + utc(t0))
+        self.assert_unchanged_warning(warn_line(t), t0)
         self.assertIn(AGENT_H, t)
 
     def test_ac38_two_users_and_39_tool_uses_no_warning(self):
@@ -283,7 +293,7 @@ class Staleness(F35):
     def test_ac38_40_tool_uses_warns(self):
         t0 = self._hook_stale_world()
         t = self.text_with(self._entries_after(t0, 0, 40))
-        self.assertEqual(warn_line(t), WARN_PFX + "Parallel work running, In progress, Exact next step unchanged since " + utc(t0))
+        self.assert_unchanged_warning(warn_line(t), t0)
 
     def test_ac38_untimed_entries_not_counted(self):
         t0 = self._hook_stale_world()

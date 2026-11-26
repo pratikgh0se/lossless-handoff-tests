@@ -129,7 +129,9 @@ class Lookup(Home):
     def test_f88_f4_no_ledger_prints_the_message_exit_0_and_creates_no_folder(self):
         r = self.dec(cwd=self.A)
         self.assertEqual((r.returncode, r.stderr), (0, ""))
-        self.assertEqual(r.stdout.strip(), "no decisions list for %s" % self.A)
+        self.assertIn("no decisions list", r.stdout)
+        self.assertIn(self.A, r.stdout)
+        self.assertEqual(r.stdout.strip().count("\n"), 0, r.stdout)
         self.assertFalse(os.path.exists(os.path.join(self.hd, "projects", key_for(self.A))))
         self.assertFalse(os.path.exists(self.hd), "no state folder is created")
 

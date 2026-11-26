@@ -56,6 +56,15 @@ def flat_strings(o):
 
 
 class F36(f35.F35):
+    def assert_degraded(self, ctx, parts, body):
+        """`HANDOFF DEGRADED:` is the marker (contract token). The reason sentence and the closing advice are wording
+        (F90.i): check the required parts of the first line, then the body byte for byte."""
+        first, _, rest = ctx.partition("\n")
+        self.assertTrue(first.startswith("HANDOFF DEGRADED:"), first)
+        for p in parts + ("Verify the handoff",):
+            self.assertIn(p, first)
+        self.assertEqual(rest, body)
+
     def setUp(self):
         super().setUp()
         self.write_transcript([user("hello there"), asst("ok")])
@@ -595,7 +604,7 @@ class Inject(F36):
         self.put_latest("HANDOFF-BODY\nmore\n")
         self.put_sidecar(status="degraded", reasons=["agent_absent", "fallback_failed"], trigger="manual")
         ctx = self.post_ctx()
-        self.assertEqual(ctx, "HANDOFF DEGRADED: no agent handoff; Haiku fallback failed." + TAIL + PLAIN + "HANDOFF-BODY\nmore")
+        self.assert_degraded(ctx, ("no agent handoff", "Haiku fallback"), PLAIN + "HANDOFF-BODY\nmore")
         self.assertLess(len(ctx), 10000)
         d = self.degraded_file()
         self.assertEqual(d["v"], 1)
@@ -622,7 +631,7 @@ class Inject(F36):
         self.put_latest("B\n")
         self.put_sidecar(status="degraded", reasons=["section_errors"], errors=["git", "bash", "toplevel"])
         ctx = self.post_ctx()
-        self.assertEqual(ctx, "HANDOFF DEGRADED: sections unavailable: git, bash, toplevel." + TAIL + PLAIN + "B")
+        self.assert_degraded(ctx, ("sections unavailable", "git, bash, toplevel"), PLAIN + "B")
         self.assertEqual(self.degraded_file()["reasons"], ["section_errors"])
 
     def test_ac62_all_reasons_joined_in_order(self):
@@ -674,14 +683,14 @@ class Inject(F36):
                 elif variant == "number":
                     self.put_sidecar(raw="5")
                 ctx = self.post_ctx()
-                self.assertEqual(ctx, "HANDOFF DEGRADED: no health record for this compaction." + TAIL + PLAIN + "BODY")
+                self.assert_degraded(ctx, ("no health record",), PLAIN + "BODY")
                 self.assertEqual(self.degraded_file()["reasons"], ["no_health"])
 
     def test_ac63_handoff_old_boundary(self):
         self.put_latest("BODY\n")
         self.put_sidecar(status="ok", age_s=16 * 60)
         ctx = self.post_ctx()
-        self.assertEqual(ctx, "HANDOFF DEGRADED: handoff not refreshed for this compaction." + TAIL + PLAIN + "BODY")
+        self.assert_degraded(ctx, ("not refreshed",), PLAIN + "BODY")
         self.assertEqual(self.degraded_file()["reasons"], ["handoff_old"])
         shutil.rmtree(self.hd)
         self.put_latest("BODY\n")

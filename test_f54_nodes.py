@@ -417,7 +417,8 @@ class EmptyProject(NodesBase):
         fx.write()
         r = self.rc("map")
         self.assertEqual((r.returncode, r.stderr), (0, ""))
-        self.assertEqual(r.stdout.strip(), "no summary nodes yet")
+        self.assertIn("no summary nodes", r.stdout)
+        self.assertEqual(r.stdout.strip().count("\n"), 0, r.stdout)
 
 
 # ---------------------------------------------------------------- AC 244 search by node
