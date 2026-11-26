@@ -191,6 +191,32 @@ class RedactIdempotent(unittest.TestCase):
         self.check([("all", text), ("all-with-markers", " ".join(MARKERS) + "\n" + text)], "one text")
 
 
+class RedactKeyWithShapeValue(unittest.TestCase):
+    """A key word (token, password, api_key) whose value is a specific secret shape: pass 1 masks it with a kind, and
+    pass 2 gives the same text with the same kind."""
+    INPUTS = ["token=ghp_" + "a" * 30, "password: sk-ant-" + "b" * 20, "api_key=AKIA" + "A" * 16]
+
+    def kinds(self, t):
+        return re.findall(r"\[REDACTED:([a-z]+)\]", t)
+
+    def test_f65_a_key_with_a_shape_value_keeps_its_mark_kind_on_the_second_pass(self):
+        cases = []
+        for x, bare in zip(self.INPUTS, ("ghp_" + "a" * 30, "sk-ant-" + "b" * 20, "AKIA" + "A" * 16)):
+            cases += [("kv", x), ("kv-prose", "KVSHAPE note: %s end of note" % x), ("kv-line", "a\n%s\nb" % x)]
+            cases += [("shape-only", bare), ("shape-prose", "KVSHAPE the value %s was pasted" % bare)]
+        texts = [t for _, t in cases]
+        once = redact_all(texts)
+        twice = redact_all(once)
+        for (label, src), a, b in zip(cases, once, twice):
+            self.assertIn("[REDACTED:", a, "%s %r was not masked: %r" % (label, src, a))
+            self.assertEqual(a, b, "%s %r: not idempotent\n  once  %r\n  twice %r" % (label, src, a, b))
+            self.assertEqual(self.kinds(a), self.kinds(b), "%s %r: the mark kind changed on pass 2" % (label, src))
+        # the kind of the first pass is the shape's kind (github, anthropic, aws), as the spec lists it
+        for x, want in zip(self.INPUTS, ("github", "anthropic", "aws")):
+            first = redact_all([x])[0]
+            self.assertIn("[REDACTED:%s]" % want, first, "%r: the mark is not the kind of its value shape: %r" % (x, first))
+
+
 # ============================================================ F37 injected parts near the limits
 HEAD1 = "Pre-compaction handoff (auto-saved):\n"
 CONT = "[Handoff continues in"
