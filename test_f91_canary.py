@@ -444,8 +444,18 @@ class CensusVerbose(Fix):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue(os.path.isfile(os.path.join(self.hd, "shapes.json")))
         out = self.run_check("--verbose")
-        self.assertRegex(out, r"(?m)^info: transcript shapes: \d+ new since \S+")
+        m = re.search(r"(?m)^info: transcript shapes: (\d+) new since \S+", out)
+        self.assertTrue(m, out)
+        self.assertEqual(m.group(1), "0", "the first run made the baseline: no shape in shapes.json is outside it")
         self.assertNotIn("F91VERBOSE", out)
+        with open(os.path.join(d, "f91d5555-0000-4000-8000-000000000003.jsonl"), "a") as f:
+            f.write(json.dumps({"type": "x-new", "sessionId": "f91d5555", "timestamp": iso(-30)}) + "\n")
+        r = subprocess.run([sys.executable, PRE, "--shape-census"], input="", capture_output=True, text=True, env=env,
+                           timeout=TIMEOUT, cwd=self.home)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        m = re.search(r"(?m)^info: transcript shapes: (\d+) new since \S+", self.run_check("--verbose"))
+        self.assertTrue(m)
+        self.assertGreaterEqual(int(m.group(1)), 1, "x-new is in shapes.json and not in the baseline")
 
 
 class NightlyCensus(unittest.TestCase):
