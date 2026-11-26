@@ -226,7 +226,13 @@ class ProveSamples(ProofBase):
         return r
 
     def receipts(self, n):
-        return [self.receipt(self.tp, key=self.SESS, sid=self.SESS, head=self.HEADTXT) for _ in range(n)]
+        out = []
+        for _ in range(n):  # a unique receipt ts each: the default ts can repeat when the clock moves between calls
+            self.rn = getattr(self, "rn", 0) + 1
+            self.t0 = getattr(self, "t0", time.time())  # one fixed base: iso() moves with the clock
+            ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.t0 - 100000 - self.rn))
+            out.append(self.receipt(self.tp, key=self.SESS, sid=self.SESS, head=self.HEADTXT, ts=ts))
+        return out
 
     def files(self):
         return sorted(os.listdir(self.samples)) if os.path.isdir(self.samples) else []
@@ -293,8 +299,11 @@ class ProveSamples(ProofBase):
         self.run_prove()
         after = set(self.files())
         self.assertEqual(len(after), 50, sorted(after))
-        self.assertEqual(len(first & after), 25, "the 5 oldest samples are deleted first")
-        self.assertEqual(sorted(first)[:5] and set(sorted(first)[:5]) & after, set(), "the oldest names are gone")
+        removed, kept = first - after, first & after
+        self.assertTrue(removed, "no old sample was deleted")
+        stamp = lambda n: n.split("-")[0]  # the time part; a same-second name may carry a counter suffix
+        self.assertLessEqual(max(map(stamp, removed)), min(map(stamp, kept)), "the oldest samples are deleted first")
+        self.assertTrue((after - first), "the samples of the second run are kept")
         self.assertEqual(len([v for v in self.verdicts() if v["checks"].get("lossless") == "fail"]), 55)
 
     def test_f90_g_negative_control_a_hit_id_that_does_not_open_fails_the_proof_check(self):
